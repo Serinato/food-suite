@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "food-suite-bf970"
+  },
+  "targets": {
+    "food-suite-bf970": {
+      "hosting": {
+        "customer": [
+          "food-suite-bf970"
+        ],
+        "merchant": [
+          "merchant-food-suite-bf970"
+        ]
+      }
+    }
+  }
+}

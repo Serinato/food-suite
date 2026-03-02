@@ -33,7 +33,7 @@ import {
   Edit,
   Mail
 } from 'lucide-react';
-import { RESTAURANTS, CATEGORIES } from './data';
+const CATEGORIES = ["Veg", "Non-Veg", "Starters", "Main Course", "Desserts", "Beverages"];
 import './App.css';
 
 // --- Home Components ---
@@ -682,35 +682,48 @@ const AddressPage = ({ onBack }) => {
 
 // --- Main App Component ---
 import { db } from './firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('HOME');
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
   const [cart, setCart] = useState([]);
   const [cloudMenu, setCloudMenu] = useState([]);
+  const [restaurantProfile, setRestaurantProfile] = useState(null);
 
-  // Listen to the live cloud menu
+  // Listen to the live cloud settings & menu
   useEffect(() => {
+    // 1. Fetch Profile
+    const unsubscribeProfile = onSnapshot(doc(db, 'settings', 'profile'), (docSnap) => {
+      if (docSnap.exists()) {
+        setRestaurantProfile({ id: 'live-menu', ...docSnap.data() });
+      }
+    });
+
+    // 2. Fetch Menu
     const q = query(collection(db, 'menu'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeMenu = onSnapshot(q, (snapshot) => {
       const items = [];
       snapshot.forEach((doc) => {
         items.push({ id: doc.id, ...doc.data() });
       });
       setCloudMenu(items);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeProfile();
+      unsubscribeMenu();
+    };
   }, []);
 
   const handleRestaurantClick = (restaurant) => {
-    // If it's our new live menu restaurant
     if (restaurant.id === 'live-menu') {
       const liveRest = {
         ...restaurant,
         menu: cloudMenu.map(item => ({
           ...item,
-          image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=200"
+          image: item.imageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=200",
+          isSpicy: item.category === 'Starters' // Just for visual interest
         }))
       };
       setSelectedRestaurant(liveRest);
@@ -757,21 +770,18 @@ function App() {
   };
 
   const renderContent = () => {
-    // Inject our live restaurant into the list
-    const liveRestaurant = {
-      id: 'live-menu',
-      name: "Your Local Kitchen",
-      cuisine: "Cloud Controlled Menu",
-      rating: "New",
-      time: "20-25 min",
-      distance: "0.5 km",
-      price: "₹₹",
-      image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=400",
-      tags: ["LIVE UPDATES"],
-      menu: cloudMenu
-    };
-
-    const allRestaurants = [liveRestaurant, ...RESTAURANTS];
+    // Only show live restaurants from Firebase
+    const liveRestaurants = restaurantProfile ? [
+      {
+        ...restaurantProfile,
+        rating: "New",
+        time: restaurantProfile.deliveryTime || "20-25 min",
+        distance: restaurantProfile.distance || "0.5 km",
+        price: "₹₹",
+        tags: ["LIVE UPDATES"],
+        menu: cloudMenu
+      }
+    ] : [];
 
     switch (currentPage) {
       case 'HOME':
@@ -782,18 +792,23 @@ function App() {
               <SearchBar />
               <FilterPills />
               <div className="section-header">
-                <h2 className="section-title">Restaurants Near You</h2>
-                <a href="#" className="view-all-link">View All</a>
+                <h2 className="section-title">Local Restaurants Managed by You</h2>
               </div>
             </div>
             <div className="restaurants-list">
-              {allRestaurants.map(restaurant => (
-                <RestaurantCard
-                  key={restaurant.id}
-                  restaurant={restaurant}
-                  onClick={() => handleRestaurantClick(restaurant)}
-                />
-              ))}
+              {liveRestaurants.length === 0 ? (
+                <div className="loading-state">
+                  <p>Connecting to Food Suite Cloud...</p>
+                </div>
+              ) : (
+                liveRestaurants.map(restaurant => (
+                  <RestaurantCard
+                    key={restaurant.id}
+                    restaurant={restaurant}
+                    onClick={() => handleRestaurantClick(restaurant)}
+                  />
+                ))
+              )}
             </div>
             <BottomNav activeTab="HOME" onTabClick={handleTabClick} />
           </div>
