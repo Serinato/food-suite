@@ -1,0 +1,14 @@
+{
+  "name": "food-suite",
+  "private": true,
+  "workspaces": [
+    "Customer App",
+    "Merchant App",
+    "Shared Core"
+  ],
+  "scripts": {
+    "dev:customer": "npm run dev -w \"Customer App\"",
+    "dev:merchant": "npm run dev -w \"Merchant App\"",
+    "install:all": "npm install"
+  }
+}

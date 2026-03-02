@@ -1,0 +1,69 @@
+:root {
+  --bg-primary: #0B0B0C;
+  --bg-secondary: #121214;
+  --surface-primary: #1A1A1C;
+  --accent-primary: #FFBC0D;
+  --text-primary: #FFFFFF;
+  --text-secondary: #9E9E9E;
+  --success: #1DA34D;
+  --danger: #FF4D4D;
+  --border-radius: 12px;
+  --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --header-height: 80px;
+  --bottom-nav-height: 65px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+
+#root {
+  width: 100%;
+  max-width: 450px; /* Mobile constraint */
+  background-color: var(--bg-primary);
+  min-height: 100vh;
+  position: relative;
+  padding-bottom: calc(var(--bottom-nav-height) + 20px);
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Common Utilities */
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
