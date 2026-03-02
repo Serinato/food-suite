@@ -1,34 +1,34 @@
 {
-    "hosting": [
+  "hosting": [
+    {
+      "target": "customer",
+      "public": "Customer App/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
         {
-            "target": "customer",
-            "public": "Customer App/dist",
-            "ignore": [
-                "firebase.json",
-                "**/.*",
-                "**/node_modules/**"
-            ],
-            "rewrites": [
-                {
-                    "source": "**",
-                    "destination": "/index.html"
-                }
-            ]
-        },
-        {
-            "target": "merchant",
-            "public": "Merchant App/dist",
-            "ignore": [
-                "firebase.json",
-                "**/.*",
-                "**/node_modules/**"
-            ],
-            "rewrites": [
-                {
-                    "source": "**",
-                    "destination": "/index.html"
-                }
-            ]
+          "source": "**",
+          "destination": "/index.html"
         }
-    ]
+      ]
+    },
+    {
+      "target": "merchant",
+      "public": "Merchant App/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ]
 }
