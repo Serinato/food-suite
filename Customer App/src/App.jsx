@@ -681,13 +681,42 @@ const AddressPage = ({ onBack }) => {
 };
 
 // --- Main App Component ---
+import { db } from './firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+
 function App() {
   const [currentPage, setCurrentPage] = useState('HOME');
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
   const [cart, setCart] = useState([]);
+  const [cloudMenu, setCloudMenu] = useState([]);
+
+  // Listen to the live cloud menu
+  useEffect(() => {
+    const q = query(collection(db, 'menu'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const items = [];
+      snapshot.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() });
+      });
+      setCloudMenu(items);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleRestaurantClick = (restaurant) => {
-    setSelectedRestaurant(restaurant);
+    // If it's our new live menu restaurant
+    if (restaurant.id === 'live-menu') {
+      const liveRest = {
+        ...restaurant,
+        menu: cloudMenu.map(item => ({
+          ...item,
+          image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=200"
+        }))
+      };
+      setSelectedRestaurant(liveRest);
+    } else {
+      setSelectedRestaurant(restaurant);
+    }
     setCurrentPage('DETAIL');
     window.scrollTo(0, 0);
   };
@@ -722,13 +751,28 @@ function App() {
     } else if (menuId === 'HISTORY') {
       setCurrentPage('PROFILE_ORDERS');
     } else {
-      // Handle other menu items if needed
       console.log('Clicked menu:', menuId);
     }
     window.scrollTo(0, 0);
   };
 
   const renderContent = () => {
+    // Inject our live restaurant into the list
+    const liveRestaurant = {
+      id: 'live-menu',
+      name: "Your Local Kitchen",
+      cuisine: "Cloud Controlled Menu",
+      rating: "New",
+      time: "20-25 min",
+      distance: "0.5 km",
+      price: "₹₹",
+      image: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=400",
+      tags: ["LIVE UPDATES"],
+      menu: cloudMenu
+    };
+
+    const allRestaurants = [liveRestaurant, ...RESTAURANTS];
+
     switch (currentPage) {
       case 'HOME':
         return (
@@ -743,7 +787,7 @@ function App() {
               </div>
             </div>
             <div className="restaurants-list">
-              {RESTAURANTS.map(restaurant => (
+              {allRestaurants.map(restaurant => (
                 <RestaurantCard
                   key={restaurant.id}
                   restaurant={restaurant}
