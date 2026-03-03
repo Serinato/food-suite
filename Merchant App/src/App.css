@@ -124,6 +124,8 @@ textarea {
   outline: none;
   transition: all 0.2s;
   background: #fdfdfd;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 input:focus,
@@ -326,4 +328,73 @@ textarea {
   font-weight: 800;
   color: #b2bec3;
   letter-spacing: 1px;
+}
+
+/* Authentication & Login Styles */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.login-card {
+  background: #fff;
+  padding: 50px 40px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.login-card h1 {
+  color: var(--text-dark);
+  margin-bottom: 10px;
+  font-size: 1.8rem;
+}
+
+.login-card p {
+  color: var(--text-light);
+  margin-bottom: 30px;
+}
+
+.logo-placeholder {
+  font-size: 48px;
+  margin-bottom: 20px;
+  background: #fdfdfd;
+  display: inline-flex;
+  padding: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+
+.login-btn {
+  width: 100%;
+  font-size: 1.1rem;
+  padding: 14px;
+}
+
+.header-titles p {
+  margin: 5px 0 0 0;
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-email {
+  font-size: 0.9rem;
+  color: var(--text-light);
+  font-weight: 600;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  font-size: 0.85rem;
 }

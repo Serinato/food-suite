@@ -3,19 +3,33 @@ import './App.css';
 import type { MenuItem } from '@food-suite/shared';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from './firebase';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, type User } from 'firebase/auth';
+import { db, storage, auth } from './firebase';
 
 function App() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+
+  // Listen to Auth State
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsub();
+  }, []);
+
+  // Dynamic identity is the user's UID (Google Account)
+  const restaurantId = user ? user.uid : 'temp-kitchen';
+
   const [syncing, setSyncing] = useState(false);
   const [profileSyncing, setProfileSyncing] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   const [restaurantProfile, setRestaurantProfile] = useState({
-    name: 'Your Local Kitchen',
-    cuisine: 'Modern Indian',
-    image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=400',
+    name: '',
+    cuisine: '',
+    image: '',
     deliveryTime: '20-25 min',
     distance: '0.5 km',
     isOpen: true
@@ -30,20 +44,34 @@ function App() {
 
   // Listen to Firestore for real-time updates
   useEffect(() => {
-    // 1. Listen for Menu Items
-    const unsubscribeMenu = onSnapshot(collection(db, 'menu'), (snapshot) => {
+    if (!user) return; // Wait until logged in
+
+    // 1. Listen for Menu Items in this specific restaurant's sub-collection
+
+    const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
+    const unsubscribeMenu = onSnapshot(menuRef, (snapshot) => {
       const items: MenuItem[] = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() } as MenuItem);
+      snapshot.forEach((docSnap) => {
+        items.push({ id: docSnap.id, ...docSnap.data() } as MenuItem);
       });
       setMenuItems(items);
       setLoading(false);
     });
 
-    // 2. Fetch Restaurant Profile
-    const unsubscribeProfile = onSnapshot(doc(db, 'settings', 'profile'), (docSnap) => {
+    // 2. Fetch specific Restaurant Profile
+    const unsubscribeProfile = onSnapshot(doc(db, 'restaurants', restaurantId), (docSnap) => {
       if (docSnap.exists()) {
         setRestaurantProfile(docSnap.data() as any);
+      } else {
+        // If the user logs in for the first time, clear any leftover state!
+        setRestaurantProfile({
+          name: '',
+          cuisine: '',
+          image: '',
+          deliveryTime: '20-25 min',
+          distance: '0.5 km',
+          isOpen: true
+        });
       }
     });
 
@@ -51,21 +79,41 @@ function App() {
       unsubscribeMenu();
       unsubscribeProfile();
     };
-  }, []);
+  }, [restaurantId, user]);
+
+
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileSyncing(true);
+
+    // Safety check: Is user logged in?
+    if (!user) {
+      alert("You must be logged in to save.");
+      setProfileSyncing(false);
+      return;
+    }
+
+
     try {
-      await setDoc(doc(db, 'settings', 'profile'), restaurantProfile);
+      // 8-second timeout for the cloud save
+      const savePromise = setDoc(doc(db, 'restaurants', restaurantId), {
+        ...restaurantProfile,
+        id: restaurantId,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Cloud timeout")), 8000));
+
+      await Promise.race([savePromise, timeoutPromise]);
       alert("Restaurant profile updated in the cloud! 🚀");
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Failed to update profile.");
+      alert(`Failed to update profile: ${error.message || "Unknown Error"}`);
     } finally {
       setProfileSyncing(false);
     }
   };
+
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -100,30 +148,75 @@ function App() {
         createdAt: new Date().toISOString()
       };
 
-      await addDoc(collection(db, 'menu'), itemData);
+      const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
+      const addPromise = addDoc(menuRef, itemData);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Cloud timeout")), 8000));
+
+      await Promise.race([addPromise, timeoutPromise]);
       setNewItem({ name: '', price: '', category: 'Main Course', description: '' });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding document: ", error);
-      alert("Failed to sync with cloud. Check console.");
+      alert(`Failed to sync with cloud: ${error.message || "Check permissions"}`);
     } finally {
       setSyncing(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (itemId: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
     try {
-      await deleteDoc(doc(db, 'menu', id));
+      await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId));
     } catch (error) {
       console.error("Error deleting document: ", error);
     }
   };
 
+
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      alert(`Login failed: ${error.message}`);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="login-container fade-in">
+        <div className="login-card">
+          <div className="logo-placeholder">🍽️</div>
+          <h1>Merchant Portal</h1>
+          <p>Sign in to manage your kitchen and menu.</p>
+          <button className="primary-btn login-btn" onClick={handleLogin}>
+            Sign in with Google
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+
   return (
-    <div className="merchant-container">
+    <div className="merchant-container fade-in">
       <header className="merchant-header">
-        <h1>Merchant Portal</h1>
-        <p>Manage your restaurant identity and menu in real-time</p>
+        <div className="header-titles">
+          <h1>Merchant Portal</h1>
+          <p>Manage your restaurant identity and menu in real-time</p>
+        </div>
+        <div className="header-actions">
+          <span className="user-email">{user.email}</span>
+          <button className="secondary-btn logout-btn" onClick={handleLogout}>Log Out</button>
+        </div>
       </header>
 
       <div className="merchant-layout">

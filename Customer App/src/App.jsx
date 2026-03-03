@@ -140,8 +140,9 @@ const BottomNav = ({ activeTab, onTabClick }) => {
 };
 
 // --- Restaurant Detail Components ---
-const RestaurantDetail = ({ restaurant, onBack, onAddToCart, onRemoveFromCart, cart, onViewCart }) => {
+const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFromCart, cart, onViewCart }) => {
   const [activeTab, setActiveTab] = useState('Popular');
+
 
   const getItemCount = (itemId) => {
     return cart.filter(i => i.id === itemId).length;
@@ -207,7 +208,10 @@ const RestaurantDetail = ({ restaurant, onBack, onAddToCart, onRemoveFromCart, c
       <div className="menu-sections">
         <h3 className="menu-section-title">Popular Items</h3>
         <div className="menu-items-list">
-          {restaurant.menu?.map(item => (
+          {items.length === 0 ? (
+            <p style={{ textAlign: 'center', opacity: 0.5, padding: '40px' }}>Loading menu...</p>
+          ) : items.map(item => (
+
             <div key={item.id} className="menu-item-card">
               <div className="item-left">
                 <div className="item-name-row">
@@ -681,58 +685,72 @@ const AddressPage = ({ onBack }) => {
 };
 
 // --- Main App Component ---
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('HOME');
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
   const [cart, setCart] = useState([]);
   const [cloudMenu, setCloudMenu] = useState([]);
-  const [restaurantProfile, setRestaurantProfile] = useState(null);
+  const [restaurants, setRestaurants] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Listen to the live cloud settings & menu
+
+  // Sign in anonymously for Firestore access
   useEffect(() => {
-    // 1. Fetch Profile
-    const unsubscribeProfile = onSnapshot(doc(db, 'settings', 'profile'), (docSnap) => {
-      if (docSnap.exists()) {
-        setRestaurantProfile({ id: 'live-menu', ...docSnap.data() });
-      }
+    signInAnonymously(auth).catch(err => console.error("Customer App Auth failed:", err));
+  }, []);
+
+  // 1. Listen to all restaurants for the Home Feed
+  useEffect(() => {
+    console.log("Customer App: Starting Global Restaurants Listener...");
+    const unsubscribe = onSnapshot(collection(db, 'restaurants'), (snapshot) => {
+      const list = [];
+      snapshot.forEach((doc) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      console.log("Customer App: Found", list.length, "restaurants");
+      setRestaurants(list);
+      setLoading(false);
+    }, (error) => {
+      console.error("Customer App: Restaurants Listener Error:", error);
     });
 
-    // 2. Fetch Menu
-    const q = query(collection(db, 'menu'), orderBy('createdAt', 'desc'));
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Listen to the specific menu when a restaurant is selected
+  useEffect(() => {
+    if (!selectedRestaurant) return;
+
+    console.log(`Customer App: Opening Menu Listener for ${selectedRestaurant.id}...`);
+    const menuRef = collection(db, 'restaurants', selectedRestaurant.id, 'menu');
+    const q = query(menuRef, orderBy('createdAt', 'desc'));
+
     const unsubscribeMenu = onSnapshot(q, (snapshot) => {
       const items = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() });
+      snapshot.forEach((docSnap) => {
+        items.push({ id: docSnap.id, ...docSnap.data() });
       });
       setCloudMenu(items);
     });
 
-    return () => {
-      unsubscribeProfile();
-      unsubscribeMenu();
-    };
-  }, []);
+    return () => unsubscribeMenu();
+  }, [selectedRestaurant?.id]);
+
 
   const handleRestaurantClick = (restaurant) => {
-    if (restaurant.id === 'live-menu') {
-      const liveRest = {
-        ...restaurant,
-        menu: cloudMenu.map(item => ({
-          ...item,
-          image: item.imageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=200",
-          isSpicy: item.category === 'Starters' // Just for visual interest
-        }))
-      };
-      setSelectedRestaurant(liveRest);
-    } else {
-      setSelectedRestaurant(restaurant);
-    }
+    const enrichedRest = {
+      ...restaurant,
+      menu: [] // Will be populated by the menu useEffect
+    };
+    setSelectedRestaurant(enrichedRest);
     setCurrentPage('DETAIL');
     window.scrollTo(0, 0);
   };
+
 
   const handleAddToCart = (item) => {
     setCart([...cart, item]);
@@ -770,18 +788,17 @@ function App() {
   };
 
   const renderContent = () => {
-    // Only show live restaurants from Firebase
-    const liveRestaurants = restaurantProfile ? [
-      {
-        ...restaurantProfile,
-        rating: "New",
-        time: restaurantProfile.deliveryTime || "20-25 min",
-        distance: restaurantProfile.distance || "0.5 km",
-        price: "₹₹",
-        tags: ["LIVE UPDATES"],
-        menu: cloudMenu
-      }
-    ] : [];
+    // Format cloud restaurants for the UI
+    const liveRestaurants = restaurants.map(rest => ({
+      ...rest,
+      image: rest.image || "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=400",
+      rating: rest.rating || "4.5",
+      time: rest.deliveryTime || "20-25 min",
+      distance: rest.distance || "1.2 km",
+      price: "₹₹",
+      tags: rest.isOpen ? ["OPEN"] : ["CLOSED"]
+    }));
+
 
     switch (currentPage) {
       case 'HOME':
@@ -863,6 +880,7 @@ function App() {
           <div className="app-container" style={{ padding: 0 }}>
             <RestaurantDetail
               restaurant={selectedRestaurant}
+              items={cloudMenu}
               onBack={() => setCurrentPage('HOME')}
               onAddToCart={handleAddToCart}
               onRemoveFromCart={handleRemoveFromCart}
