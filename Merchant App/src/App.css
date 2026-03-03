@@ -289,3 +289,41 @@ textarea {
   color: var(--text-light);
   font-style: italic;
 }
+
+.image-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+.upload-label {
+  display: inline-block;
+  padding: 12px;
+  background: #fdfdfd;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  color: var(--text-light);
+}
+
+.upload-label:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #fff;
+}
+
+.or-divider {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #b2bec3;
+  letter-spacing: 1px;
+}

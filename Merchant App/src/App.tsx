@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import type { MenuItem } from '@food-suite/shared';
-import { db } from './firebase';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from './firebase';
 
 function App() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [profileSyncing, setProfileSyncing] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [restaurantProfile, setRestaurantProfile] = useState({
     name: 'Your Local Kitchen',
@@ -62,6 +64,24 @@ function App() {
       alert("Failed to update profile.");
     } finally {
       setProfileSyncing(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const storageRef = ref(storage, `restaurant/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      setRestaurantProfile({ ...restaurantProfile, image: downloadURL });
+    } catch (error) {
+      console.error("Error uploading image: ", error);
+      alert("Failed to upload image.");
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -130,12 +150,26 @@ function App() {
                 />
               </div>
               <div className="input-group">
-                <label>Header Image URL</label>
-                <input
-                  type="text"
-                  value={restaurantProfile.image}
-                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, image: e.target.value })}
-                />
+                <label>Header Image</label>
+                <div className="image-options">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    id="header-image-upload"
+                    className="file-input-hidden"
+                  />
+                  <label htmlFor="header-image-upload" className="upload-label">
+                    {uploadingImage ? 'Uploading...' : '📁 Choose File'}
+                  </label>
+                  <span className="or-divider">OR</span>
+                  <input
+                    type="text"
+                    value={restaurantProfile.image}
+                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, image: e.target.value })}
+                    placeholder="Paste Image URL"
+                  />
+                </div>
               </div>
               <div className="input-group checkbox-group">
                 <label>
