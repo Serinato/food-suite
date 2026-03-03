@@ -687,7 +687,7 @@ const AddressPage = ({ onBack }) => {
 // --- Main App Component ---
 import { db, auth } from './firebase';
 import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('HOME');
@@ -696,30 +696,59 @@ function App() {
   const [cloudMenu, setCloudMenu] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [debugStatus, setDebugStatus] = useState('Initializing...');
+  const [authError, setAuthError] = useState(null);
+  const [dbError, setDbError] = useState(null);
 
 
-  // Sign in anonymously for Firestore access
+
+  // 1. Unified Auth and Firestore Listener
   useEffect(() => {
-    signInAnonymously(auth).catch(err => console.error("Customer App Auth failed:", err));
-  }, []);
+    console.log("Customer App: Starting Unified Auth Flow...");
+    let unsubscribeSnapshot = null;
 
-  // 1. Listen to all restaurants for the Home Feed
-  useEffect(() => {
-    console.log("Customer App: Starting Global Restaurants Listener...");
-    const unsubscribe = onSnapshot(collection(db, 'restaurants'), (snapshot) => {
-      const list = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
-      });
-      console.log("Customer App: Found", list.length, "restaurants");
-      setRestaurants(list);
-      setLoading(false);
-    }, (error) => {
-      console.error("Customer App: Restaurants Listener Error:", error);
+    // First, start listening for auth state changes
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log("Customer App: Auth detected (UID:", user.uid, ")");
+        setDebugStatus(`Auth OK: ${user.uid.substring(0, 5)}...`);
+
+        // Only start Firestore listener when auth is confirmed
+        if (!unsubscribeSnapshot) {
+          unsubscribeSnapshot = onSnapshot(collection(db, 'restaurants'), (snapshot) => {
+            const list = [];
+            snapshot.forEach((doc) => {
+              list.push({ id: doc.id, ...doc.data() });
+            });
+            console.log("Customer App: Restaurants loaded:", list.length);
+            setRestaurants(list);
+            setLoading(false);
+            setDebugStatus(`Connected! Found ${list.length} kitchens.`);
+          }, (error) => {
+            console.error("Customer App: Firestore error:", error);
+            setDbError(error.message);
+            setDebugStatus(`DB Er: ${error.code}`);
+            setLoading(false);
+          });
+        }
+      } else {
+        console.log("Customer App: User is null, attempting anonymous login...");
+        setDebugStatus('Logging in cloud anonymously...');
+        signInAnonymously(auth).catch((err) => {
+          console.error("Customer App: Anonymous Login FAILED:", err);
+          setAuthError(err.code || err.message);
+          setDebugStatus(`Auth Failed: ${err.code}`);
+          setLoading(false);
+        });
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
   }, []);
+
 
   // 2. Listen to the specific menu when a restaurant is selected
   useEffect(() => {
@@ -811,7 +840,12 @@ function App() {
               <div className="section-header">
                 <h2 className="section-title">Local Restaurants Managed by You</h2>
               </div>
+              <div style={{ padding: '4px 16px', fontSize: '10px', opacity: 0.6, background: '#eee', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Cloud Status: {debugStatus}</span>
+                {dbError && <span style={{ color: 'red' }}>DB Er: {dbError}</span>}
+              </div>
             </div>
+
             <div className="restaurants-list">
               {liveRestaurants.length === 0 ? (
                 <div className="loading-state">
