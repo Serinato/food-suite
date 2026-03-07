@@ -27,6 +27,7 @@ interface MenuItem {
   category: string;
   description: string;
   isAvailable: boolean;
+  createdAt?: string;
 }
 
 function App() {
@@ -59,7 +60,8 @@ function App() {
     description: '',
     imageUrl: '',
     address: '',
-    cuisine: ''
+    cuisine: '',
+    isOpen: true
   });
 
   useEffect(() => {
@@ -97,8 +99,16 @@ function App() {
       const docRef = doc(db, 'restaurants', id);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        setRestaurantProfile(docSnap.data() as any);
-        setRestaurantName(docSnap.data().name || 'Your Restaurant');
+        const data = docSnap.data();
+        setRestaurantProfile({
+          name: data.name || '',
+          description: data.description || '',
+          imageUrl: data.imageUrl || '',
+          address: data.address || '',
+          cuisine: data.cuisine || '',
+          isOpen: data.isOpen !== undefined ? data.isOpen : true
+        } as any);
+        setRestaurantName(data.name || 'Your Restaurant');
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -154,9 +164,9 @@ function App() {
       const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
       await addDoc(menuRef, itemData);
       setNewItem({ name: '', price: '', category: 'Main Course', description: '' });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error adding document: ", error);
-      alert(`Failed to sync: ${error.message}`);
+      alert("Failed to sync with cloud. Check console.");
     } finally {
       setSyncing(false);
     }
@@ -171,15 +181,11 @@ function App() {
     setScanError(null);
     setScanResults([]);
 
-    console.log("Scanner: Starting read for file:", file.name);
-
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const base64 = reader.result as string;
-        console.log("Scanner: Base64 ready, calling Gemini...");
         const results = await scanMenuFromImage(base64);
-        console.log("Scanner: AI results received:", results);
         setScanResults(results);
       } catch (err: any) {
         console.error("Scanner error:", err);
@@ -267,120 +273,176 @@ function App() {
   }
 
   return (
-    <div className="admin-container">
-      <nav className="admin-nav">
-        <div className="nav-brand">
-          <h1>{restaurantName}</h1>
-          <span className="badge">Merchant Admin</span>
+    <div className="merchant-container fade-in">
+      <header className="merchant-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="header-titles" style={{ textAlign: 'left' }}>
+            <h1>{restaurantName ? `${restaurantName} - Portal` : 'Merchant Portal'}</h1>
+            <p>Manage your restaurant identity and menu in real-time</p>
+          </div>
+          <div className="header-actions" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <span className="user-email">{user.email}</span>
+            <button className="secondary-btn logout-btn" onClick={handleLogout}>Log Out</button>
+          </div>
         </div>
-        <button onClick={handleLogout} className="logout-btn">Logout</button>
-      </nav>
+      </header>
 
-      <div className="admin-grid">
-        <aside className="admin-sidebar">
+      <div className="merchant-layout">
+        <aside className="merchant-sidebar">
           <section className="profile-section">
-            <h2>Kitchen Profile</h2>
+            <h2>Restaurant Profile</h2>
             <form onSubmit={handleUpdateProfile} className="profile-form">
-              <div className="image-preview" onClick={() => document.getElementById('imageInput')?.click()}>
-                {restaurantProfile.imageUrl ? (
-                  <img src={restaurantProfile.imageUrl} alt="Profile" />
-                ) : (
-                  <div className="placeholder">Upload Cover Image</div>
-                )}
-                <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} hidden />
+              <div className="input-group">
+                <label>Restaurant Name</label>
+                <input
+                  type="text"
+                  value={restaurantProfile.name}
+                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
+                  placeholder="e.g. Amara Curry House"
+                />
               </div>
-
-              <input
-                placeholder="Kitchen Name"
-                value={restaurantProfile.name}
-                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
-              />
-              <input
-                placeholder="Cuisine Type"
-                value={restaurantProfile.cuisine}
-                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
-              />
-              <textarea
-                placeholder="Description"
-                value={restaurantProfile.description}
-                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, description: e.target.value })}
-              />
-              <button type="submit" className="primary-btn" disabled={profileSyncing}>
-                {profileSyncing ? 'Updating...' : 'Save Profile'}
+              <div className="input-group">
+                <label>Cuisine Type</label>
+                <input
+                  type="text"
+                  value={restaurantProfile.cuisine}
+                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
+                  placeholder="e.g. Indian, Chinese"
+                />
+              </div>
+              <div className="input-group">
+                <label>Header Image</label>
+                <div className="image-options">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    id="header-image-upload"
+                    className="file-input-hidden"
+                  />
+                  <label htmlFor="header-image-upload" className="upload-label">
+                    {uploadingImage ? 'Uploading...' : '📁 Choose File'}
+                  </label>
+                  <span className="or-divider">OR</span>
+                  <input
+                    type="text"
+                    value={restaurantProfile.imageUrl}
+                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, imageUrl: e.target.value })}
+                    placeholder="Paste Image URL"
+                  />
+                </div>
+              </div>
+              <div className="input-group checkbox-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={restaurantProfile.isOpen}
+                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, isOpen: e.target.checked })}
+                  />
+                  Restaurant is Open for Orders
+                </label>
+              </div>
+              <button type="submit" className="secondary-btn" disabled={profileSyncing}>
+                {profileSyncing ? 'Saving...' : 'Update Settings'}
               </button>
             </form>
           </section>
 
           <section className="menu-form-section">
-            <div className="section-header-flex">
-              <h2>Add New Dish</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h2 style={{ margin: 0 }}>Add New Dish</h2>
               <div className="scan-button-wrapper">
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleScanUpload}
                   id="menu-scan-upload"
-                  hidden
+                  className="file-input-hidden"
                 />
-                <label htmlFor="menu-scan-upload" className="scan-badge">
+                <label htmlFor="menu-scan-upload" className="scan-badge" style={{ background: '#f0f0ff', color: '#6366f1', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', border: '1px solid currentColor' }}>
                   ✨ Scan Menu
                 </label>
               </div>
             </div>
 
-            <form onSubmit={handleAdd} className="add-form">
-              <input
-                placeholder="Dish Name"
-                value={newItem.name}
-                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                required
-              />
-              <input
-                type="number"
-                placeholder="Price"
-                value={newItem.price}
-                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                required
-              />
-              <input
-                placeholder="Category (e.g. Mains, Sides)"
-                value={newItem.category}
-                onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                required
-              />
-              <textarea
-                placeholder="Description"
-                value={newItem.description}
-                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-              />
+            <form onSubmit={handleAdd} className="menu-form">
+              <div className="input-group">
+                <label>Dish Name</label>
+                <input
+                  type="text"
+                  value={newItem.name}
+                  required
+                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                  placeholder="e.g. Paneer Butter Masala"
+                />
+              </div>
+
+              <div className="input-grid">
+                <div className="input-group">
+                  <label>Price (₹)</label>
+                  <input
+                    type="number"
+                    value={newItem.price}
+                    required
+                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                    placeholder="250"
+                  />
+                </div>
+                <div className="input-group">
+                  <label>Category</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mains, Sides"
+                    value={newItem.category}
+                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label>Description</label>
+                <textarea
+                  value={newItem.description}
+                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                  placeholder="Tell customers about this dish..."
+                />
+              </div>
+
               <button type="submit" className="primary-btn" disabled={syncing}>
-                {syncing ? 'Adding...' : 'Add Dish'}
+                {syncing ? 'Adding...' : 'Add to Menu'}
               </button>
             </form>
           </section>
         </aside>
 
-        <main className="admin-main">
-          <section className="menu-list-section">
-            <div className="section-header">
-              <h2>Active Menu ({menuItems.length})</h2>
+        <main className="menu-preview-section">
+          <div className="preview-header">
+            <h2>Live Menu Preview</h2>
+            <div className={`status-pill ${restaurantProfile.isOpen ? 'open' : 'closed'}`}>
+              {restaurantProfile.isOpen ? '● OPEN' : '● CLOSED'}
             </div>
-            <div className="menu-grid">
-              {menuItems.map(item => (
-                <div key={item.id} className="menu-card">
-                  <div className="item-info">
+          </div>
+
+          <div className="preview-list">
+            {menuItems.length === 0 ? (
+              <p className="empty-msg">No items added yet. Your customers will see an empty menu.</p>
+            ) : (
+              menuItems.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(item => (
+                <div key={item.id} className="preview-card">
+                  <div className="card-info">
                     <h3>{item.name}</h3>
-                    <p className="item-cat">{item.category}</p>
-                    <p className="item-desc">{item.description}</p>
+                    <p className="category-badge">{item.category}</p>
+                    <p className="desc">{item.description}</p>
                   </div>
-                  <div className="item-actions">
-                    <span className="price">₹{item.price}</span>
-                    <button onClick={() => handleDelete(item.id)} className="delete-btn">Delete</button>
+                  <div className="card-price">
+                    ₹{item.price}
+                    <button className="delete-btn" title="Delete Item" onClick={() => handleDelete(item.id)}>×</button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              ))
+            )}
+          </div>
         </main>
       </div>
 
@@ -403,7 +465,7 @@ function App() {
                 <div className="scan-error-view">
                   <div className="error-icon">⚠️</div>
                   <p className="error-msg">{scanError}</p>
-                  <label htmlFor="menu-scan-upload" className="primary-btn retry-btn">
+                  <label htmlFor="menu-scan-upload" className="primary-btn retry-btn" style={{ cursor: 'pointer' }}>
                     Try different image
                   </label>
                 </div>
@@ -449,16 +511,14 @@ function App() {
               )}
             </div>
 
-            <div className="modal-footer">
-              <button className="secondary-btn" onClick={() => setShowScanner(false)}>Cancel</button>
-              <button
-                className="primary-btn"
-                disabled={scanning || scanResults.length === 0 || syncing}
-                onClick={handleConfirmScan}
-              >
-                {syncing ? 'Adding...' : `Add ${scanResults.length} Items`}
-              </button>
-            </div>
+            {!scanning && !scanError && (
+              <div className="modal-footer">
+                <button className="secondary-btn" onClick={() => setShowScanner(false)}>Cancel</button>
+                <button className="primary-btn" onClick={handleConfirmScan} disabled={syncing}>
+                  {syncing ? 'Adding...' : `Add ${scanResults.length} Items`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
