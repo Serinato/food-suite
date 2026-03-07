@@ -1,39 +1,51 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { db, auth } from './firebase';
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc,
+  updateDoc,
+  getDoc
+} from 'firebase/firestore';
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup
+} from 'firebase/auth';
+import type { User } from 'firebase/auth';
+import { scanMenuFromImage } from './aiService';
 import './App.css';
-import type { MenuItem } from '@food-suite/shared';
-import { collection, addDoc, onSnapshot, deleteDoc, doc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, type User } from 'firebase/auth';
-import { db, storage, auth } from './firebase';
+
+interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+  isAvailable: boolean;
+}
 
 function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [restaurantId, setRestaurantId] = useState('');
+  const [restaurantName, setRestaurantName] = useState('');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-
-  // Listen to Auth State
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsub();
-  }, []);
-
-  // Dynamic identity is the user's UID (Google Account)
-  const restaurantId = user ? user.uid : 'temp-kitchen';
-
   const [syncing, setSyncing] = useState(false);
   const [profileSyncing, setProfileSyncing] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  const [restaurantProfile, setRestaurantProfile] = useState({
-    name: '',
-    cuisine: '',
-    image: '',
-    deliveryTime: '20-25 min',
-    distance: '0.5 km',
-    isOpen: true
-  });
+  // New Scan States
+  const [scanning, setScanning] = useState(false);
+  const [scanResults, setScanResults] = useState<any[]>([]);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   const [newItem, setNewItem] = useState({
     name: '',
@@ -42,102 +54,93 @@ function App() {
     description: ''
   });
 
-  // Listen to Firestore for real-time updates
+  const [restaurantProfile, setRestaurantProfile] = useState({
+    name: '',
+    description: '',
+    imageUrl: '',
+    address: '',
+    cuisine: ''
+  });
+
   useEffect(() => {
-    if (!user) return; // Wait until logged in
-
-    // 1. Listen for Menu Items in this specific restaurant's sub-collection
-
-    const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
-    const unsubscribeMenu = onSnapshot(menuRef, (snapshot) => {
-      const items: MenuItem[] = [];
-      snapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...docSnap.data() } as MenuItem);
-      });
-      setMenuItems(items);
-      setLoading(false);
-    });
-
-    // 2. Fetch specific Restaurant Profile
-    const unsubscribeProfile = onSnapshot(doc(db, 'restaurants', restaurantId), (docSnap) => {
-      if (docSnap.exists()) {
-        setRestaurantProfile(docSnap.data() as any);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        setRestaurantId(currentUser.uid);
+        fetchRestaurantProfile(currentUser.uid);
       } else {
-        // If the user logs in for the first time, clear any leftover state!
-        setRestaurantProfile({
-          name: '',
-          cuisine: '',
-          image: '',
-          deliveryTime: '20-25 min',
-          distance: '0.5 km',
-          isOpen: true
-        });
+        setLoading(false);
       }
     });
 
-    return () => {
-      unsubscribeMenu();
-      unsubscribeProfile();
-    };
-  }, [restaurantId, user]);
+    return () => unsubscribe();
+  }, []);
 
+  useEffect(() => {
+    if (restaurantId) {
+      const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
+      const unsubscribe = onSnapshot(menuRef, (snapshot) => {
+        const items = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as MenuItem[];
+        setMenuItems(items);
+        setLoading(false);
+      });
 
+      return () => unsubscribe();
+    }
+  }, [restaurantId]);
+
+  const fetchRestaurantProfile = async (id: string) => {
+    try {
+      const docRef = doc(db, 'restaurants', id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setRestaurantProfile(docSnap.data() as any);
+        setRestaurantName(docSnap.data().name || 'Your Restaurant');
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileSyncing(true);
-
-    // Safety check: Is user logged in?
-    if (!user) {
-      alert("You must be logged in to save.");
-      setProfileSyncing(false);
-      return;
-    }
-
-
     try {
-      // 8-second timeout for the cloud save
-      const savePromise = setDoc(doc(db, 'restaurants', restaurantId), {
-        ...restaurantProfile,
-        id: restaurantId,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Cloud timeout")), 8000));
-
-      await Promise.race([savePromise, timeoutPromise]);
-      alert("Restaurant profile updated in the cloud! 🚀");
-    } catch (error: any) {
-      console.error(error);
-      alert(`Failed to update profile: ${error.message || "Unknown Error"}`);
+      const docRef = doc(db, 'restaurants', restaurantId);
+      await updateDoc(docRef, restaurantProfile);
+      setRestaurantName(restaurantProfile.name);
+      alert('Profile updated successfully!');
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      alert('Failed to update profile');
     } finally {
       setProfileSyncing(false);
     }
   };
-
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadingImage(true);
-    try {
-      const storageRef = ref(storage, `restaurant/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
-      setRestaurantProfile({ ...restaurantProfile, image: downloadURL });
-    } catch (error) {
-      console.error("Error uploading image: ", error);
-      alert("Failed to upload image.");
-    } finally {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setRestaurantProfile(prev => ({ ...prev, imageUrl: reader.result as string }));
       setUploadingImage(false);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.name || !newItem.price) return;
-    setSyncing(true);
 
+    setSyncing(true);
     try {
       const itemData = {
         name: newItem.name,
@@ -149,225 +152,316 @@ function App() {
       };
 
       const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
-      const addPromise = addDoc(menuRef, itemData);
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Cloud timeout")), 8000));
-
-      await Promise.race([addPromise, timeoutPromise]);
+      await addDoc(menuRef, itemData);
       setNewItem({ name: '', price: '', category: 'Main Course', description: '' });
     } catch (error: any) {
       console.error("Error adding document: ", error);
-      alert(`Failed to sync with cloud: ${error.message || "Check permissions"}`);
+      alert(`Failed to sync: ${error.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScanning(true);
+    setShowScanner(true);
+    setScanError(null);
+    setScanResults([]);
+
+    console.log("Scanner: Starting read for file:", file.name);
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const base64 = reader.result as string;
+        console.log("Scanner: Base64 ready, calling Gemini...");
+        const results = await scanMenuFromImage(base64);
+        console.log("Scanner: AI results received:", results);
+        setScanResults(results);
+      } catch (err: any) {
+        console.error("Scanner error:", err);
+        setScanError(err.message || "Failed to scan menu. Please try again.");
+      } finally {
+        setScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleConfirmScan = async () => {
+    setSyncing(true);
+    try {
+      const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
+      const promises = scanResults.map(item => addDoc(menuRef, {
+        ...item,
+        isAvailable: true,
+        createdAt: new Date().toISOString()
+      }));
+      await Promise.all(promises);
+      alert(`${scanResults.length} items added successfully!`);
+      setShowScanner(false);
+      setScanResults([]);
+    } catch (err) {
+      alert("Failed to save scans.");
     } finally {
       setSyncing(false);
     }
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!confirm('Are you sure you want to delete this item?')) return;
+    if (!confirm('Are you sure?')) return;
     try {
       await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId));
     } catch (error) {
-      console.error("Error deleting document: ", error);
+      console.error("Error deleting:", error);
     }
   };
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
 
-  const handleLogin = async () => {
+  const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error("Login failed:", error);
-      alert(`Login failed: ${error.message}`);
+      alert(error.message);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
+  const handleLogout = () => signOut(auth);
+
+  if (loading) return <div className="loading">Loading dashboard...</div>;
 
   if (!user) {
     return (
-      <div className="login-container fade-in">
-        <div className="login-card">
-          <div className="logo-placeholder">🍽️</div>
-          <h1>Merchant Portal</h1>
-          <p>Sign in to manage your kitchen and menu.</p>
-          <button className="primary-btn login-btn" onClick={handleLogin}>
-            Sign in with Google
+      <div className="login-container">
+        <div className="login-box">
+          <h1>Merchant Login</h1>
+          <form onSubmit={handleLogin} className="email-login">
+            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <button type="submit" className="primary-btn">Login with Email</button>
+          </form>
+
+          <div className="login-divider">
+            <span>OR</span>
+          </div>
+
+          <button onClick={handleGoogleLogin} className="google-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+            Login with Google
           </button>
         </div>
       </div>
     );
   }
 
-
   return (
-    <div className="merchant-container fade-in">
-      <header className="merchant-header">
-        <div className="header-titles">
-          <h1>Merchant Portal</h1>
-          <p>Manage your restaurant identity and menu in real-time</p>
+    <div className="admin-container">
+      <nav className="admin-nav">
+        <div className="nav-brand">
+          <h1>{restaurantName}</h1>
+          <span className="badge">Merchant Admin</span>
         </div>
-        <div className="header-actions">
-          <span className="user-email">{user.email}</span>
-          <button className="secondary-btn logout-btn" onClick={handleLogout}>Log Out</button>
-        </div>
-      </header>
+        <button onClick={handleLogout} className="logout-btn">Logout</button>
+      </nav>
 
-      <div className="merchant-layout">
-        <aside className="merchant-sidebar">
+      <div className="admin-grid">
+        <aside className="admin-sidebar">
           <section className="profile-section">
-            <h2>Restaurant Profile</h2>
+            <h2>Kitchen Profile</h2>
             <form onSubmit={handleUpdateProfile} className="profile-form">
-              <div className="input-group">
-                <label>Restaurant Name</label>
-                <input
-                  type="text"
-                  value={restaurantProfile.name}
-                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
-                  placeholder="e.g. Amara Curry House"
-                />
+              <div className="image-preview" onClick={() => document.getElementById('imageInput')?.click()}>
+                {restaurantProfile.imageUrl ? (
+                  <img src={restaurantProfile.imageUrl} alt="Profile" />
+                ) : (
+                  <div className="placeholder">Upload Cover Image</div>
+                )}
+                <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} hidden />
               </div>
-              <div className="input-group">
-                <label>Cuisine Type</label>
-                <input
-                  type="text"
-                  value={restaurantProfile.cuisine}
-                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
-                  placeholder="e.g. Indian, Chinese"
-                />
-              </div>
-              <div className="input-group">
-                <label>Header Image</label>
-                <div className="image-options">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    id="header-image-upload"
-                    className="file-input-hidden"
-                  />
-                  <label htmlFor="header-image-upload" className="upload-label">
-                    {uploadingImage ? 'Uploading...' : '📁 Choose File'}
-                  </label>
-                  <span className="or-divider">OR</span>
-                  <input
-                    type="text"
-                    value={restaurantProfile.image}
-                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, image: e.target.value })}
-                    placeholder="Paste Image URL"
-                  />
-                </div>
-              </div>
-              <div className="input-group checkbox-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={restaurantProfile.isOpen}
-                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, isOpen: e.target.checked })}
-                  />
-                  Restaurant is Open for Orders
-                </label>
-              </div>
-              <button type="submit" className="secondary-btn" disabled={profileSyncing}>
-                {profileSyncing ? 'Saving...' : 'Update Settings'}
+
+              <input
+                placeholder="Kitchen Name"
+                value={restaurantProfile.name}
+                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
+              />
+              <input
+                placeholder="Cuisine Type"
+                value={restaurantProfile.cuisine}
+                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
+              />
+              <textarea
+                placeholder="Description"
+                value={restaurantProfile.description}
+                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, description: e.target.value })}
+              />
+              <button type="submit" className="primary-btn" disabled={profileSyncing}>
+                {profileSyncing ? 'Updating...' : 'Save Profile'}
               </button>
             </form>
           </section>
 
           <section className="menu-form-section">
-            <h2>Add New Dish</h2>
-            <form onSubmit={handleAdd} className="menu-form">
-              <div className="input-group">
-                <label>Dish Name</label>
+            <div className="section-header-flex">
+              <h2>Add New Dish</h2>
+              <div className="scan-button-wrapper">
                 <input
-                  type="text"
-                  value={newItem.name}
-                  required
-                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  placeholder="e.g. Paneer Butter Masala"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleScanUpload}
+                  id="menu-scan-upload"
+                  hidden
                 />
+                <label htmlFor="menu-scan-upload" className="scan-badge">
+                  ✨ Scan Menu
+                </label>
               </div>
+            </div>
 
-              <div className="input-grid">
-                <div className="input-group">
-                  <label>Price (₹)</label>
-                  <input
-                    type="number"
-                    value={newItem.price}
-                    required
-                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                    placeholder="250"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Category</label>
-                  <select
-                    value={newItem.category}
-                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                  >
-                    <option>Starters</option>
-                    <option>Main Course</option>
-                    <option>Desserts</option>
-                    <option>Beverages</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Description</label>
-                <textarea
-                  value={newItem.description}
-                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  placeholder="Tell customers about this dish..."
-                />
-              </div>
-
+            <form onSubmit={handleAdd} className="add-form">
+              <input
+                placeholder="Dish Name"
+                value={newItem.name}
+                onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                required
+              />
+              <input
+                type="number"
+                placeholder="Price"
+                value={newItem.price}
+                onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                required
+              />
+              <input
+                placeholder="Category (e.g. Mains, Sides)"
+                value={newItem.category}
+                onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                required
+              />
+              <textarea
+                placeholder="Description"
+                value={newItem.description}
+                onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+              />
               <button type="submit" className="primary-btn" disabled={syncing}>
-                {syncing ? 'Syncing...' : 'Add to Menu'}
+                {syncing ? 'Adding...' : 'Add Dish'}
               </button>
             </form>
           </section>
         </aside>
 
-        <main className="menu-preview-section">
-          <div className="preview-header">
-            <h2>Live Menu Preview</h2>
-            <div className={`status-pill ${restaurantProfile.isOpen ? 'open' : 'closed'}`}>
-              {restaurantProfile.isOpen ? '● OPEN' : '● CLOSED'}
+        <main className="admin-main">
+          <section className="menu-list-section">
+            <div className="section-header">
+              <h2>Active Menu ({menuItems.length})</h2>
             </div>
-          </div>
-
-          {loading ? (
-            <div className="loading-spinner">Waking up the cloud database...</div>
-          ) : (
-            <div className="preview-list">
-              {menuItems.length === 0 ? (
-                <p className="empty-msg">No items added yet. Your customers will see an empty menu.</p>
-              ) : (
-                menuItems.sort((a, b) => (b as any).createdAt?.localeCompare((a as any).createdAt)).map(item => (
-                  <div key={item.id} className="preview-card">
-                    <div className="card-info">
-                      <h3>{item.name}</h3>
-                      <p className="category-badge">{item.category}</p>
-                      <p className="desc">{item.description}</p>
-                    </div>
-                    <div className="card-price">
-                      ₹{item.price}
-                      <button className="delete-btn" title="Delete Item" onClick={() => handleDelete(item.id)}>×</button>
-                    </div>
+            <div className="menu-grid">
+              {menuItems.map(item => (
+                <div key={item.id} className="menu-card">
+                  <div className="item-info">
+                    <h3>{item.name}</h3>
+                    <p className="item-cat">{item.category}</p>
+                    <p className="item-desc">{item.description}</p>
                   </div>
-                ))
-              )}
+                  <div className="item-actions">
+                    <span className="price">₹{item.price}</span>
+                    <button onClick={() => handleDelete(item.id)} className="delete-btn">Delete</button>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </section>
         </main>
       </div>
+
+      {showScanner && (
+        <div className="scanner-overlay">
+          <div className="scanner-modal">
+            <div className="modal-header">
+              <h3>✨ AI Menu Scanner</h3>
+              <button className="close-btn" onClick={() => setShowScanner(false)}>×</button>
+            </div>
+
+            <div className="modal-body">
+              {scanning ? (
+                <div className="scan-loading">
+                  <div className="spinner"></div>
+                  <p>Gemini is reading your menu...</p>
+                  <p className="tiny-hint">This usually takes 5-10 seconds</p>
+                </div>
+              ) : scanError ? (
+                <div className="scan-error-view">
+                  <div className="error-icon">⚠️</div>
+                  <p className="error-msg">{scanError}</p>
+                  <label htmlFor="menu-scan-upload" className="primary-btn retry-btn">
+                    Try different image
+                  </label>
+                </div>
+              ) : (
+                <div className="results-list">
+                  <p className="hint">We found {scanResults.length} items. Please verify before adding.</p>
+                  {scanResults.map((item, idx) => (
+                    <div key={idx} className="result-item">
+                      <input
+                        className="item-name"
+                        value={item.name}
+                        onChange={(e) => {
+                          const newResults = [...scanResults];
+                          newResults[idx].name = e.target.value;
+                          setScanResults(newResults);
+                        }}
+                      />
+                      <div className="item-meta">
+                        <input
+                          type="number"
+                          className="item-price"
+                          value={item.price}
+                          onChange={(e) => {
+                            const newResults = [...scanResults];
+                            newResults[idx].price = parseFloat(e.target.value);
+                            setScanResults(newResults);
+                          }}
+                        />
+                        <input
+                          className="item-cat"
+                          placeholder="Category"
+                          value={item.category}
+                          onChange={(e) => {
+                            const newResults = [...scanResults];
+                            newResults[idx].category = e.target.value;
+                            setScanResults(newResults);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="secondary-btn" onClick={() => setShowScanner(false)}>Cancel</button>
+              <button
+                className="primary-btn"
+                disabled={scanning || scanResults.length === 0 || syncing}
+                onClick={handleConfirmScan}
+              >
+                {syncing ? 'Adding...' : `Add ${scanResults.length} Items`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

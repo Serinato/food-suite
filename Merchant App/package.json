@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@food-suite/shared": "1.0.0",
+    "@google/generative-ai": "^0.24.1",
     "firebase": "^11.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
