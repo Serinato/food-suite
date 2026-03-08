@@ -6,7 +6,7 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
-  updateDoc,
+  setDoc,
   getDoc
 } from 'firebase/firestore';
 import {
@@ -42,6 +42,7 @@ function App() {
   const [syncing, setSyncing] = useState(false);
   const [profileSyncing, setProfileSyncing] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   // New Scan States
   const [scanning, setScanning] = useState(false);
@@ -123,7 +124,7 @@ function App() {
     setProfileSyncing(true);
     try {
       const docRef = doc(db, 'restaurants', restaurantId);
-      await updateDoc(docRef, restaurantProfile);
+      await setDoc(docRef, restaurantProfile, { merge: true });
       setRestaurantName(restaurantProfile.name);
       alert('Profile updated successfully!');
     } catch (error) {
@@ -139,16 +140,20 @@ function App() {
     if (!file) return;
 
     setUploadingImage(true);
+    setUploadSuccess(false);
     try {
       const storageRef = ref(storage, `restaurant/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(storageRef);
       setRestaurantProfile(prev => ({ ...prev, image: downloadURL }));
+      setUploadSuccess(true);
+      setTimeout(() => setUploadSuccess(false), 3000);
     } catch (error) {
       console.error("Error uploading image: ", error);
       alert("Failed to upload image. Ensure Firebase Storage rules allow uploads.");
     } finally {
       setUploadingImage(false);
+      e.target.value = '';
     }
   };
 
@@ -326,17 +331,44 @@ function App() {
                     id="header-image-upload"
                     className="file-input-hidden"
                   />
-                  <label htmlFor="header-image-upload" className="upload-label">
-                    {uploadingImage ? 'Uploading...' : '📁 Choose File'}
+                  <label
+                    htmlFor="header-image-upload"
+                    className="upload-label"
+                    style={{
+                      borderColor: uploadSuccess ? '#1ea97c' : '',
+                      color: uploadSuccess ? '#1ea97c' : '',
+                      background: uploadSuccess ? '#e1f9eb' : ''
+                    }}
+                  >
+                    {uploadingImage ? '⏳ Uploading to Cloud...' : uploadSuccess ? '✅ Upload Complete!' : '📁 Choose File'}
                   </label>
-                  <span className="or-divider">OR</span>
-                  <input
-                    type="text"
-                    value={restaurantProfile.image}
-                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, image: e.target.value })}
-                    placeholder="Paste Image URL"
-                  />
+
                 </div>
+
+                {/* Live Customer Preview */}
+                {restaurantProfile.image && (
+                  <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: 0, marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Customer App Preview
+                    </p>
+                    <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
+                      <img src={restaurantProfile.image} alt="Restaurant Header" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }}></div>
+
+                      {/* Customer App layout mock */}
+                      <div style={{ position: 'absolute', top: '10px', left: '10px', width: '30px', height: '30px', background: 'rgba(255,255,255,0.9)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>←</div>
+                      <div style={{ position: 'absolute', bottom: '15px', left: '15px', color: 'white', display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
+                        <div style={{ width: '50px', height: '50px', background: 'white', borderRadius: '12px', padding: '2px', overflow: 'hidden' }}>
+                          <img src={restaurantProfile.image} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px' }} />
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '1.2rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)', fontFamily: 'system-ui' }}>{restaurantProfile.name || 'Your Kitchen'}</h3>
+                          <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.9 }}>{restaurantProfile.cuisine || 'Cuisine'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="input-group checkbox-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

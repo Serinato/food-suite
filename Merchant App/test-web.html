@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h1>Test Upload</h1>
+  <input type="file" id="file" />
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+    import { getStorage, ref, uploadBytes } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAfL72mMYZRCmcdJPUvZmCyjAFLVE7a-4U",
+      authDomain: "food-suite-bf970.firebaseapp.com",
+      projectId: "food-suite-bf970",
+      storageBucket: "food-suite-bf970.firebasestorage.app",
+      messagingSenderId: "248938861326",
+      appId: "1:248938861326:web:b21e11dc9d2c3942bbfd5f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const storage = getStorage(app);
+
+    document.getElementById('file').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        console.log("Starting upload...");
+        const storageRef = ref(storage, "test/" + Date.now());
+        try {
+            await uploadBytes(storageRef, file);
+            console.log("Upload SUCCESS");
+        } catch (err) {
+            console.error("Upload ERROR", err);
+        }
+    });
+  </script>
+</body>
+</html>
