@@ -189,7 +189,7 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
         </div>
         <div className="stat-item">
           <MapPin size={14} color="var(--accent-primary)" />
-          <span>1.2 km</span>
+          <span>{restaurant.distance || '—'}</span>
         </div>
       </div>
 
@@ -696,6 +696,28 @@ import { db, auth } from './firebase';
 import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
+// Haversine formula: calculates distance between two lat/lng points in km
+function calcDistanceKm(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function formatDistance(km) {
+  if (km === null || km === undefined) return '—';
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState('HOME');
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
@@ -706,6 +728,7 @@ function App() {
   const [debugStatus, setDebugStatus] = useState('Initializing...');
   const [authError, setAuthError] = useState(null);
   const [dbError, setDbError] = useState(null);
+  const [customerLocation, setCustomerLocation] = useState(null);
 
 
 
@@ -754,6 +777,20 @@ function App() {
       unsubscribeAuth();
       if (unsubscribeSnapshot) unsubscribeSnapshot();
     };
+  }, []);
+
+  // Get customer's current location for distance calculation
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCustomerLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          console.log('Customer location detected:', pos.coords.latitude, pos.coords.longitude);
+        },
+        (err) => console.log('Customer geolocation not available:', err.message),
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+      );
+    }
   }, []);
 
 
@@ -825,15 +862,20 @@ function App() {
 
   const renderContent = () => {
     // Format cloud restaurants for the UI
-    const liveRestaurants = restaurants.map(rest => ({
-      ...rest,
-      image: rest.image || "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=400",
-      rating: rest.rating || "4.5",
-      time: rest.deliveryTime || "20-25 min",
-      distance: rest.distance || "1.2 km",
-      price: "₹₹",
-      tags: rest.isOpen ? ["OPEN"] : ["CLOSED"]
-    }));
+    const liveRestaurants = restaurants.map(rest => {
+      const distKm = customerLocation
+        ? calcDistanceKm(customerLocation.lat, customerLocation.lng, rest.latitude, rest.longitude)
+        : null;
+      return {
+        ...rest,
+        image: rest.image || "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=400",
+        rating: rest.rating || "4.5",
+        time: rest.deliveryTime || "20-25 min",
+        distance: formatDistance(distKm),
+        price: "₹₹",
+        tags: rest.isOpen ? ["OPEN"] : ["CLOSED"]
+      };
+    });
 
 
     switch (currentPage) {

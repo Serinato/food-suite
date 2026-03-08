@@ -472,6 +472,44 @@ function App() {
     );
   };
 
+  // Auto-heal technical addresses (heals data saved when API was limited)
+  useEffect(() => {
+    const isTechnicalAddress = (addr: string) => {
+      if (!addr) return false;
+      if (addr.includes('Detected Location')) return true;
+      // Detects strings like "19.233, 72.988"
+      return /^[\d\s.,-]+$/.test(addr) && addr.includes(',');
+    };
+
+    const healAddress = async () => {
+      if (
+        restaurantProfile.latitude &&
+        restaurantProfile.longitude &&
+        isTechnicalAddress(restaurantProfile.address) &&
+        window.google?.maps?.Geocoder
+      ) {
+        try {
+          const geocoder = new google.maps.Geocoder();
+          const result = await geocoder.geocode({
+            location: { lat: restaurantProfile.latitude, lng: restaurantProfile.longitude }
+          });
+          if (result.results?.[0]) {
+            setRestaurantProfile(prev => ({
+              ...prev,
+              address: result.results[0].formatted_address
+            }));
+          }
+        } catch (err) {
+          console.log("Silent healing failed (API might be loading or limited)");
+        }
+      }
+    };
+
+    // Delay slightly to ensure Maps is ready
+    const timer = setTimeout(healAddress, 1000);
+    return () => clearTimeout(timer);
+  }, [restaurantProfile.latitude, restaurantProfile.longitude, restaurantProfile.address]);
+
   if (loading) return <div className="loading">Loading dashboard...</div>;
 
   if (!user) {
