@@ -26,6 +26,7 @@ interface MenuItem {
   name: string;
   price: number;
   category: string;
+  isVeg?: boolean;
   description: string;
   imageUrl?: string;
   isAvailable: boolean;
@@ -56,10 +57,13 @@ function App() {
   const [newItem, setNewItem] = useState({
     name: '',
     price: '',
-    category: 'Main Course',
+    category: '',
+    isVeg: '',
     description: '',
     imageUrl: ''
   });
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   const [restaurantProfile, setRestaurantProfile] = useState({
     name: '',
@@ -183,9 +187,9 @@ function App() {
     }
   };
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAddOrEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.name || !newItem.price) return;
+    if (!newItem.name || !newItem.price || newItem.isVeg === '') return;
 
     setSyncing(true);
     try {
@@ -193,21 +197,48 @@ function App() {
         name: newItem.name,
         price: parseFloat(newItem.price),
         category: newItem.category,
+        isVeg: newItem.isVeg === 'true',
         description: newItem.description,
         imageUrl: newItem.imageUrl,
         isAvailable: true,
-        createdAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        ...(editingItemId ? {} : { createdAt: new Date().toISOString() })
       };
 
       const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
-      await addDoc(menuRef, itemData);
-      setNewItem({ name: '', price: '', category: 'Main Course', description: '', imageUrl: '' });
+
+      if (editingItemId) {
+        await setDoc(doc(db, 'restaurants', restaurantId, 'menu', editingItemId), itemData, { merge: true });
+        setEditingItemId(null);
+      } else {
+        await addDoc(menuRef, itemData);
+      }
+
+      setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
       setDishImageSuccess(false);
     } catch (error) {
-      console.error("Error adding document: ", error);
+      console.error("Error saving document: ", error);
       alert("Failed to sync with cloud. Check console.");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleEditClick = (item: MenuItem) => {
+    setEditingItemId(item.id);
+    setNewItem({
+      name: item.name,
+      price: item.price.toString(),
+      category: item.category || '',
+      isVeg: item.isVeg !== undefined ? item.isVeg.toString() : '',
+      description: item.description || '',
+      imageUrl: item.imageUrl || ''
+    });
+    setDishImageSuccess(item.imageUrl ? true : false);
+    // Scroll to form
+    const formElement = document.querySelector('.menu-form-section');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -416,22 +447,24 @@ function App() {
 
           <section className="menu-form-section">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0 }}>Add New Dish</h2>
-              <div className="scan-button-wrapper">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleScanUpload}
-                  id="menu-scan-upload"
-                  className="file-input-hidden"
-                />
-                <label htmlFor="menu-scan-upload" className="scan-badge" style={{ background: '#f0f0ff', color: '#6366f1', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', border: '1px solid currentColor' }}>
-                  ✨ Scan Menu
-                </label>
-              </div>
+              <h2 style={{ margin: 0 }}>{editingItemId ? 'Edit Dish' : 'Add New Dish'}</h2>
+              {!editingItemId && (
+                <div className="scan-button-wrapper">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScanUpload}
+                    id="menu-scan-upload"
+                    className="file-input-hidden"
+                  />
+                  <label htmlFor="menu-scan-upload" className="scan-badge" style={{ background: '#f0f0ff', color: '#6366f1', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', border: '1px solid currentColor' }}>
+                    ✨ Scan Menu
+                  </label>
+                </div>
+              )}
             </div>
 
-            <form onSubmit={handleAdd} className="menu-form">
+            <form onSubmit={handleAddOrEdit} className="menu-form">
               <div className="input-group">
                 <label>Dish Name</label>
                 <input
@@ -441,6 +474,34 @@ function App() {
                   onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                   placeholder="e.g. Paneer Butter Masala"
                 />
+              </div>
+
+              <div className="input-group">
+                <label>Dietary Preference (Mandatory)</label>
+                <div style={{ display: 'flex', gap: '20px', padding: '5px 0' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
+                    <input
+                      type="radio"
+                      name="isVeg"
+                      value="true"
+                      checked={newItem.isVeg === 'true'}
+                      onChange={(e) => setNewItem({ ...newItem, isVeg: e.target.value })}
+                      required
+                    />
+                    <span style={{ color: '#1ea97c' }}>●</span> Veg
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
+                    <input
+                      type="radio"
+                      name="isVeg"
+                      value="false"
+                      checked={newItem.isVeg === 'false'}
+                      onChange={(e) => setNewItem({ ...newItem, isVeg: e.target.value })}
+                      required
+                    />
+                    <span style={{ color: '#ff4d4d' }}>●</span> Non-Veg
+                  </label>
+                </div>
               </div>
 
               <div className="input-grid">
@@ -455,13 +516,12 @@ function App() {
                   />
                 </div>
                 <div className="input-group">
-                  <label>Category</label>
+                  <label>Cuisine</label>
                   <input
                     type="text"
-                    placeholder="e.g. Mains, Sides"
+                    placeholder="e.g. North Indian"
                     value={newItem.category}
                     onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                    required
                   />
                 </div>
               </div>
@@ -504,9 +564,20 @@ function App() {
                 )}
               </div>
 
-              <button type="submit" className="primary-btn" disabled={syncing}>
-                {syncing ? 'Adding...' : 'Add to Menu'}
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="submit" className="primary-btn" disabled={syncing} style={{ flex: 1 }}>
+                  {syncing ? 'Saving...' : editingItemId ? 'Update Dish' : 'Add to Menu'}
+                </button>
+                {editingItemId && (
+                  <button type="button" className="secondary-btn" disabled={syncing} onClick={() => {
+                    setEditingItemId(null);
+                    setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
+                    setDishImageSuccess(false);
+                  }}>
+                    Cancel
+                  </button>
+                )}
+              </div>
             </form>
           </section>
         </aside>
@@ -532,14 +603,26 @@ function App() {
                       </div>
                     )}
                     <div className="card-info">
-                      <h3>{item.name}</h3>
-                      <p className="category-badge">{item.category}</p>
+                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {item.isVeg !== undefined && (
+                          <span style={{ color: item.isVeg ? '#1ea97c' : '#ff4d4d', fontSize: '10px' }}>●</span>
+                        )}
+                        {item.name}
+                      </h3>
+                      {item.category && <p className="category-badge">{item.category}</p>}
                       <p className="desc">{item.description}</p>
                     </div>
                   </div>
                   <div className="card-price">
                     ₹{item.price}
-                    <button className="delete-btn" title="Delete Item" onClick={() => handleDelete(item.id)}>×</button>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                      <button className="icon-action-btn edit" title="Edit Item" onClick={() => handleEditClick(item)}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                      </button>
+                      <button className="icon-action-btn delete" title="Delete Item" onClick={() => handleDelete(item.id)}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -598,7 +681,7 @@ function App() {
                         />
                         <input
                           className="item-cat"
-                          placeholder="Category"
+                          placeholder="Cuisine"
                           value={item.category}
                           onChange={(e) => {
                             const newResults = [...scanResults];
