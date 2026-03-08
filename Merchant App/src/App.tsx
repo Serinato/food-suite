@@ -27,6 +27,7 @@ interface MenuItem {
   price: number;
   category: string;
   description: string;
+  imageUrl?: string;
   isAvailable: boolean;
   createdAt?: string;
 }
@@ -43,6 +44,8 @@ function App() {
   const [profileSyncing, setProfileSyncing] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadingDishImage, setUploadingDishImage] = useState(false);
+  const [dishImageSuccess, setDishImageSuccess] = useState(false);
 
   // New Scan States
   const [scanning, setScanning] = useState(false);
@@ -54,7 +57,8 @@ function App() {
     name: '',
     price: '',
     category: 'Main Course',
-    description: ''
+    description: '',
+    imageUrl: ''
   });
 
   const [restaurantProfile, setRestaurantProfile] = useState({
@@ -157,6 +161,28 @@ function App() {
     }
   };
 
+  const handleDishImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingDishImage(true);
+    setDishImageSuccess(false);
+    try {
+      const storageRef = ref(storage, `dishes/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      setNewItem(prev => ({ ...prev, imageUrl: downloadURL }));
+      setDishImageSuccess(true);
+      setTimeout(() => setDishImageSuccess(false), 3000);
+    } catch (error) {
+      console.error("Error uploading dish image: ", error);
+      alert("Failed to upload dish image. Ensure Firebase Storage rules allow uploads.");
+    } finally {
+      setUploadingDishImage(false);
+      e.target.value = '';
+    }
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.name || !newItem.price) return;
@@ -168,13 +194,15 @@ function App() {
         price: parseFloat(newItem.price),
         category: newItem.category,
         description: newItem.description,
+        imageUrl: newItem.imageUrl,
         isAvailable: true,
         createdAt: new Date().toISOString()
       };
 
       const menuRef = collection(db, 'restaurants', restaurantId, 'menu');
       await addDoc(menuRef, itemData);
-      setNewItem({ name: '', price: '', category: 'Main Course', description: '' });
+      setNewItem({ name: '', price: '', category: 'Main Course', description: '', imageUrl: '' });
+      setDishImageSuccess(false);
     } catch (error) {
       console.error("Error adding document: ", error);
       alert("Failed to sync with cloud. Check console.");
@@ -447,6 +475,35 @@ function App() {
                 />
               </div>
 
+              <div className="input-group">
+                <label>Dish Image (Optional)</label>
+                <div className="image-options">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleDishImageUpload}
+                    id="dish-image-upload"
+                    className="file-input-hidden"
+                  />
+                  <label
+                    htmlFor="dish-image-upload"
+                    className="upload-label"
+                    style={{
+                      borderColor: dishImageSuccess ? '#1ea97c' : '',
+                      color: dishImageSuccess ? '#1ea97c' : '',
+                      background: dishImageSuccess ? '#e1f9eb' : ''
+                    }}
+                  >
+                    {uploadingDishImage ? '⏳ Uploading...' : dishImageSuccess ? '✅ Uploaded!' : '📁 Choose Image'}
+                  </label>
+                </div>
+                {newItem.imageUrl && (
+                  <div style={{ marginTop: '10px', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <img src={newItem.imageUrl} alt="Dish preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                )}
+              </div>
+
               <button type="submit" className="primary-btn" disabled={syncing}>
                 {syncing ? 'Adding...' : 'Add to Menu'}
               </button>
@@ -468,10 +525,17 @@ function App() {
             ) : (
               menuItems.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(item => (
                 <div key={item.id} className="preview-card">
-                  <div className="card-info">
-                    <h3>{item.name}</h3>
-                    <p className="category-badge">{item.category}</p>
-                    <p className="desc">{item.description}</p>
+                  <div style={{ display: 'flex', gap: '15px', flexGrow: 1 }}>
+                    {item.imageUrl && (
+                      <div style={{ width: '80px', height: '80px', flexShrink: 0 }}>
+                        <img src={item.imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
+                      </div>
+                    )}
+                    <div className="card-info">
+                      <h3>{item.name}</h3>
+                      <p className="category-badge">{item.category}</p>
+                      <p className="desc">{item.description}</p>
+                    </div>
                   </div>
                   <div className="card-price">
                     ₹{item.price}

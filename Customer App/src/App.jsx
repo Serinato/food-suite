@@ -222,7 +222,9 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
                 <span className="item-price">₹{item.price.toFixed(2)}</span>
               </div>
               <div className="item-right">
-                <img src={item.image} alt={item.name} className="item-img" />
+                {(item.imageUrl || item.image) && (
+                  <img src={item.imageUrl || item.image} alt={item.name} className="item-img" />
+                )}
                 {getItemCount(item.id) > 0 ? (
                   <div className="quantity-selector">
                     <button className="qty-btn" onClick={() => onRemoveFromCart(item.id)}>
