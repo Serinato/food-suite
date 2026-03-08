@@ -423,6 +423,39 @@
   margin-bottom: 4px;
 }
 
+.veg-indicator {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.veg-indicator.veg {
+  border-color: #1ea97c;
+}
+
+.veg-indicator.non-veg {
+  border-color: #e74c3c;
+}
+
+.veg-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.veg-indicator.veg .veg-indicator-dot {
+  background: #1ea97c;
+}
+
+.veg-indicator.non-veg .veg-indicator-dot {
+  background: #e74c3c;
+}
+
 .spicy-dot {
   width: 8px;
   height: 8px;

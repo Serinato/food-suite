@@ -215,6 +215,11 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
             <div key={item.id} className="menu-item-card">
               <div className="item-left">
                 <div className="item-name-row">
+                  {item.isVeg !== undefined && (
+                    <div className={`veg-indicator ${item.isVeg ? 'veg' : 'non-veg'}`}>
+                      <div className="veg-indicator-dot"></div>
+                    </div>
+                  )}
                   {item.isSpicy && <div className="spicy-dot"></div>}
                   <span className="item-name">{item.name}</span>
                 </div>
