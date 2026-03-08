@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db, auth, storage } from './firebase';
 import {
   collection,
@@ -46,6 +46,7 @@ function App() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadingDishImage, setUploadingDishImage] = useState(false);
+  const [locatingUser, setLocatingUser] = useState(false);
   const [dishImageSuccess, setDishImageSuccess] = useState(false);
 
   // New Scan States
@@ -70,6 +71,8 @@ function App() {
     description: '',
     image: '',
     address: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
     cuisine: '',
     isOpen: true
   });
@@ -115,6 +118,8 @@ function App() {
           description: data.description || '',
           image: data.image || data.imageUrl || '',
           address: data.address || '',
+          latitude: data.latitude || null,
+          longitude: data.longitude || null,
           cuisine: data.cuisine || '',
           isOpen: data.isOpen !== undefined ? data.isOpen : true
         } as any);
@@ -316,6 +321,157 @@ function App() {
 
   const handleLogout = () => signOut(auth);
 
+  // ── Google Maps / Places ──
+  const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+
+  // Load the Google Maps script once
+  useEffect(() => {
+    if (!GOOGLE_MAPS_KEY || GOOGLE_MAPS_KEY === 'YOUR_GOOGLE_MAPS_API_KEY_HERE') return;
+    if (document.getElementById('google-maps-script')) {
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => { };
+    document.head.appendChild(script);
+  }, [GOOGLE_MAPS_KEY]);
+
+  // Initialize autocomplete on an input element
+  const attachAutocomplete = (inputEl: HTMLInputElement) => {
+    if (autocompleteRef.current) return; // already initialized
+
+    const ac = new google.maps.places.Autocomplete(inputEl, {
+      types: ['establishment', 'geocode'],
+      componentRestrictions: { country: 'in' },
+      fields: ['formatted_address', 'geometry', 'name']
+    });
+
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (!place.geometry?.location) return;
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+      const addr = place.name
+        ? `${place.name}, ${place.formatted_address}`
+        : place.formatted_address || '';
+
+      setRestaurantProfile(prev => ({
+        ...prev,
+        address: addr,
+        latitude: lat,
+        longitude: lng
+      }));
+      setIsEditingLocation(false);
+    });
+
+    autocompleteRef.current = ac;
+  };
+
+  // Callback ref: fires when the input element mounts in the DOM
+  const locationInputCallbackRef = (node: HTMLInputElement | null) => {
+    autocompleteInputRef.current = node;
+    if (!node) return;
+
+    // If Google is already loaded, attach immediately
+    if (window.google?.maps?.places) {
+      attachAutocomplete(node);
+      return;
+    }
+
+    // Otherwise poll until Google Maps is ready (script may still be loading)
+    const interval = setInterval(() => {
+      if (window.google?.maps?.places) {
+        clearInterval(interval);
+        attachAutocomplete(node);
+      }
+    }, 200);
+
+    // Clean up after 15 seconds if Google never loads
+    setTimeout(() => clearInterval(interval), 15000);
+  };
+
+  // "Use My Location" — browser geolocation + Google reverse geocode
+  const handleUseMyLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocatingUser(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setRestaurantProfile(prev => ({ ...prev, latitude, longitude }));
+
+        // Google reverse geocode
+        if (window.google?.maps) {
+          try {
+            const geocoder = new google.maps.Geocoder();
+            const result = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
+            if (result.results?.[0]) {
+              const fullAddress = result.results[0].formatted_address;
+              setRestaurantProfile(prev => ({
+                ...prev,
+                address: fullAddress,
+                latitude,
+                longitude
+              }));
+              setIsEditingLocation(false);
+              if (autocompleteInputRef.current) {
+                autocompleteInputRef.current.value = fullAddress;
+              }
+            } else {
+              throw new Error('No address results found for these coordinates.');
+            }
+          } catch (err) {
+            console.error('Google reverse geocoding failed (Check if Geocoding API is enabled!):', err);
+            // Even if geocoding fails, we have the coordinates.
+            // Let's set a friendly placeholder instead of numbers.
+            setRestaurantProfile(prev => ({
+              ...prev,
+              address: 'Detected Location (precise coordinates captured)',
+              latitude,
+              longitude
+            }));
+            setIsEditingLocation(false);
+          }
+        } else {
+          // Fallback if Google isn't loaded
+          setRestaurantProfile(prev => ({
+            ...prev,
+            address: 'Detected Location',
+            latitude,
+            longitude
+          }));
+          setIsEditingLocation(false);
+        }
+        setLocatingUser(false);
+      },
+      (error) => {
+        setLocatingUser(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            alert('Location permission denied. Please allow location access in your browser settings.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            alert('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            alert('The request to get your location timed out.');
+            break;
+          default:
+            alert('An unknown error occurred while getting location.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
   if (loading) return <div className="loading">Loading dashboard...</div>;
 
   if (!user) {
@@ -428,6 +584,60 @@ function App() {
                     </div>
                   </div>
                 )}
+              </div>
+              <div className="input-group">
+                <div className="location-container-v2">
+                  {(!restaurantProfile.latitude || isEditingLocation) ? (
+                    <div className="location-editing">
+                      <div className="location-input-wrapper-v2">
+                        <div className="input-with-pin">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff4d4d"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" /></svg>
+                          <input
+                            ref={locationInputCallbackRef}
+                            type="text"
+                            defaultValue={restaurantProfile.address}
+                            onChange={(e) => setRestaurantProfile({ ...restaurantProfile, address: e.target.value })}
+                            placeholder="Enter restaurant address..."
+                            className="location-search-input"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="detect-location-btn"
+                          onClick={handleUseMyLocation}
+                          disabled={locatingUser}
+                        >
+                          {locatingUser ? <span className="mini-spinner"></span> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>}
+                          <span>Current Location</span>
+                        </button>
+                      </div>
+                      <p className="tiny-hint">Start typing or use "Current Location" for better accuracy.</p>
+                    </div>
+                  ) : (
+                    <div className="location-display-card">
+                      <div className="card-map-mock">
+                        <div className="pulse-pin"></div>
+                      </div>
+                      <div className="card-content">
+                        <div className="card-info">
+                          <div className="location-label">Verified Restaurant Location</div>
+                          <div className="location-address-main">{restaurantProfile.address || 'Address not set'}</div>
+                        </div>
+                        <div className="card-actions">
+                          <button type="button" className="text-btn change-loc-btn" onClick={() => setIsEditingLocation(true)}>Change</button>
+                          <a
+                            href={`https://www.google.com/maps?q=${restaurantProfile.latitude},${restaurantProfile.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-btn map-link-btn"
+                          >
+                            View on Grid
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="input-group checkbox-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
