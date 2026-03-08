@@ -564,12 +564,12 @@ function App() {
   return (
     <div className="merchant-container fade-in">
       <header className="merchant-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="header-titles" style={{ textAlign: 'left' }}>
+        <div className="header-row">
+          <div className="header-titles">
             <h1>{restaurantName ? `${restaurantName} - Portal` : 'Merchant Portal'}</h1>
-            <p>Manage your restaurant identity and menu in real-time</p>
+            <p className="header-subtitle">Manage your restaurant identity and menu in real-time</p>
           </div>
-          <div className="header-actions" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <div className="header-actions">
             <div className="header-toggle-group" onClick={handleToggleOpen}>
               <div className={`toggle-switch ${restaurantProfile.isOpen ? 'on' : 'off'}`}>
                 <div className="toggle-knob"></div>
@@ -718,7 +718,7 @@ function App() {
           </section>
 
           <section className="menu-form-section">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <div className="section-header-flex">
               <h2 style={{ margin: 0 }}>{editingItemId ? 'Edit Dish' : 'Add New Dish'}</h2>
               {!editingItemId && (
                 <div className="scan-button-wrapper">
