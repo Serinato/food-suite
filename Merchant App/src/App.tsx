@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from './firebase';
+import { db, auth, storage } from './firebase';
 import {
   collection,
   addDoc,
@@ -17,6 +17,7 @@ import {
   signInWithPopup
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { scanMenuFromImage } from './aiService';
 import './App.css';
 
@@ -58,7 +59,7 @@ function App() {
   const [restaurantProfile, setRestaurantProfile] = useState({
     name: '',
     description: '',
-    imageUrl: '',
+    image: '',
     address: '',
     cuisine: '',
     isOpen: true
@@ -103,7 +104,7 @@ function App() {
         setRestaurantProfile({
           name: data.name || '',
           description: data.description || '',
-          imageUrl: data.imageUrl || '',
+          image: data.image || data.imageUrl || '',
           address: data.address || '',
           cuisine: data.cuisine || '',
           isOpen: data.isOpen !== undefined ? data.isOpen : true
@@ -138,12 +139,17 @@ function App() {
     if (!file) return;
 
     setUploadingImage(true);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setRestaurantProfile(prev => ({ ...prev, imageUrl: reader.result as string }));
+    try {
+      const storageRef = ref(storage, `restaurant/${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+      setRestaurantProfile(prev => ({ ...prev, image: downloadURL }));
+    } catch (error) {
+      console.error("Error uploading image: ", error);
+      alert("Failed to upload image. Ensure Firebase Storage rules allow uploads.");
+    } finally {
       setUploadingImage(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -326,8 +332,8 @@ function App() {
                   <span className="or-divider">OR</span>
                   <input
                     type="text"
-                    value={restaurantProfile.imageUrl}
-                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, imageUrl: e.target.value })}
+                    value={restaurantProfile.image}
+                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, image: e.target.value })}
                     placeholder="Paste Image URL"
                   />
                 </div>
