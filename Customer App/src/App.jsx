@@ -81,39 +81,51 @@ const FilterPills = () => {
   );
 };
 
-const RestaurantCard = ({ restaurant, onClick }) => (
-  <div className="restaurant-card fade-in" onClick={onClick} style={{ cursor: 'pointer' }}>
-    <div className="card-image-wrapper">
-      <img src={restaurant.image} alt={restaurant.name} className="card-image" />
-      {restaurant.tags.includes("FREE DELIVERY") && (
-        <div className="free-delivery-badge">FREE DELIVERY</div>
-      )}
-      <div className="favorite-btn">
-        <Heart size={16} />
+const RestaurantCard = ({ restaurant, onClick }) => {
+  const isClosed = !restaurant.isOpen && restaurant.isOpen !== undefined;
+  return (
+    <div
+      className={`restaurant-card fade-in ${isClosed ? 'closed-restaurant' : ''}`}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+    >
+      <div className="card-image-wrapper">
+        <img src={restaurant.image} alt={restaurant.name} className="card-image" />
+        {restaurant.tags.includes("FREE DELIVERY") && (
+          <div className="free-delivery-badge">FREE DELIVERY</div>
+        )}
+        {isClosed && (
+          <div className="closed-overlay">
+            <span className="closed-badge">CLOSED</span>
+          </div>
+        )}
+        <div className="favorite-btn">
+          <Heart size={16} />
+        </div>
+      </div>
+      <div className="card-content">
+        <div className="card-title-row">
+          <h3 className="restaurant-name">{restaurant.name}</h3>
+          <span className="rating-badge">{restaurant.rating}</span>
+        </div>
+        <p className="cuisine-info">{restaurant.cuisine}</p>
+        <div className="card-footer">
+          <div className="footer-item">
+            <Clock size={14} color="var(--accent-primary)" />
+            <span>{restaurant.time}</span>
+          </div>
+          <div className="footer-item">
+            <Route size={14} color="var(--accent-primary)" />
+            <span>{restaurant.distance}</span>
+          </div>
+          <div className="footer-item">
+            <span>{restaurant.price}</span>
+          </div>
+        </div>
       </div>
     </div>
-    <div className="card-content">
-      <div className="card-title-row">
-        <h3 className="restaurant-name">{restaurant.name}</h3>
-        <span className="rating-badge">{restaurant.rating}</span>
-      </div>
-      <p className="cuisine-info">{restaurant.cuisine}</p>
-      <div className="card-footer">
-        <div className="footer-item">
-          <Clock size={14} color="var(--accent-primary)" />
-          <span>{restaurant.time}</span>
-        </div>
-        <div className="footer-item">
-          <Route size={14} color="var(--accent-primary)" />
-          <span>{restaurant.distance}</span>
-        </div>
-        <div className="footer-item">
-          <span>{restaurant.price}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const BottomNav = ({ activeTab, onTabClick }) => {
   const items = [
@@ -212,7 +224,7 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
             <p style={{ textAlign: 'center', opacity: 0.5, padding: '40px' }}>Loading menu...</p>
           ) : items.map(item => (
 
-            <div key={item.id} className="menu-item-card">
+            <div key={item.id} className={`menu-item-card ${item.isAvailable === false ? 'item-unavailable' : ''}`}>
               <div className="item-left">
                 <div className="item-name-row">
                   {item.isVeg !== undefined && (
@@ -222,6 +234,7 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
                   )}
                   {item.isSpicy && <div className="spicy-dot"></div>}
                   <span className="item-name">{item.name}</span>
+                  {item.isAvailable === false && <span className="unavailable-label">Not Available</span>}
                 </div>
                 <p className="item-desc">{item.description}</p>
                 <span className="item-price">₹{item.price.toFixed(2)}</span>
@@ -230,7 +243,9 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
                 {(item.imageUrl || item.image) && (
                   <img src={item.imageUrl || item.image} alt={item.name} className="item-img" />
                 )}
-                {getItemCount(item.id) > 0 ? (
+                {item.isAvailable === false ? (
+                  <button className="add-btn" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }}>+ ADD</button>
+                ) : getItemCount(item.id) > 0 ? (
                   <div className="quantity-selector">
                     <button className="qty-btn" onClick={() => onRemoveFromCart(item.id)}>
                       <Minus size={14} strokeWidth={3} />
@@ -815,9 +830,13 @@ function App() {
 
 
   const handleRestaurantClick = (restaurant) => {
+    if (restaurant.isOpen === false) {
+      alert(`${restaurant.name || 'This restaurant'} is currently closed. Please try again later.`);
+      return;
+    }
     const enrichedRest = {
       ...restaurant,
-      menu: [] // Will be populated by the menu useEffect
+      menu: []
     };
     setSelectedRestaurant(enrichedRest);
     setCurrentPage('DETAIL');

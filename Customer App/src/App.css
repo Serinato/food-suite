@@ -1454,3 +1454,48 @@
   border: none;
   color: var(--bg-primary);
 }
+
+/* ── Closed Restaurant State ── */
+.restaurant-card.closed-restaurant {
+  opacity: 0.55;
+  filter: grayscale(60%);
+  position: relative;
+}
+
+.closed-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+}
+
+.closed-badge {
+  background: rgba(220, 53, 69, 0.9);
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 18px;
+  border-radius: 8px;
+  letter-spacing: 0.1em;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Unavailable Dish State ── */
+.menu-item-card.item-unavailable {
+  opacity: 0.4;
+  filter: grayscale(40%);
+}
+
+.unavailable-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+  margin-left: 4px;
+}

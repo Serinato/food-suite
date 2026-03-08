@@ -827,3 +827,130 @@ textarea {
   border: none;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
 }
+
+/* ── Header Toggle (Restaurant Open/Closed) ── */
+.header-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 50px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.header-toggle-group:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  position: relative;
+  transition: background 0.3s ease;
+  flex-shrink: 0;
+}
+
+.toggle-switch.on {
+  background: #1ea97c;
+}
+
+.toggle-switch.off {
+  background: #ccc;
+}
+
+.toggle-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 2px;
+  transition: left 0.3s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.on .toggle-knob {
+  left: 22px;
+}
+
+.toggle-switch.off .toggle-knob {
+  left: 2px;
+}
+
+.toggle-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: color 0.3s ease;
+}
+
+.toggle-label.open {
+  color: #1ea97c;
+}
+
+.toggle-label.closed {
+  color: #ff4d4d;
+}
+
+/* ── Dish Toggle (Small) ── */
+.toggle-switch-sm {
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  flex-shrink: 0;
+}
+
+.toggle-switch-sm.on {
+  background: #1ea97c;
+}
+
+.toggle-switch-sm.off {
+  background: #ccc;
+}
+
+.toggle-knob-sm {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  top: 2px;
+  transition: left 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch-sm.on .toggle-knob-sm {
+  left: 16px;
+}
+
+.toggle-switch-sm.off .toggle-knob-sm {
+  left: 2px;
+}
+
+/* ── Unavailable Dish State ── */
+.preview-card.unavailable {
+  opacity: 0.45;
+  position: relative;
+}
+
+.preview-card.unavailable::after {
+  content: 'UNAVAILABLE';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+}

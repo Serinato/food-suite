@@ -148,6 +148,31 @@ function App() {
     }
   };
 
+  // Instant toggle: Restaurant Open/Closed
+  const handleToggleOpen = async () => {
+    const newIsOpen = !restaurantProfile.isOpen;
+    setRestaurantProfile(prev => ({ ...prev, isOpen: newIsOpen }));
+    try {
+      await setDoc(doc(db, 'restaurants', restaurantId), { isOpen: newIsOpen }, { merge: true });
+    } catch (err) {
+      console.error('Failed to toggle open status:', err);
+      setRestaurantProfile(prev => ({ ...prev, isOpen: !newIsOpen })); // rollback
+    }
+  };
+
+  // Instant toggle: Dish Available/Unavailable
+  const handleToggleDishAvailable = async (itemId: string, currentAvail: boolean) => {
+    const newAvail = !currentAvail;
+    // Optimistic update
+    setMenuItems(prev => prev.map(i => i.id === itemId ? { ...i, isAvailable: newAvail } : i));
+    try {
+      await setDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId), { isAvailable: newAvail }, { merge: true });
+    } catch (err) {
+      console.error('Failed to toggle dish availability:', err);
+      setMenuItems(prev => prev.map(i => i.id === itemId ? { ...i, isAvailable: !newAvail } : i)); // rollback
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -545,6 +570,14 @@ function App() {
             <p>Manage your restaurant identity and menu in real-time</p>
           </div>
           <div className="header-actions" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div className="header-toggle-group" onClick={handleToggleOpen}>
+              <div className={`toggle-switch ${restaurantProfile.isOpen ? 'on' : 'off'}`}>
+                <div className="toggle-knob"></div>
+              </div>
+              <span className={`toggle-label ${restaurantProfile.isOpen ? 'open' : 'closed'}`}>
+                {restaurantProfile.isOpen ? 'Open' : 'Closed'}
+              </span>
+            </div>
             <span className="user-email">{user.email}</span>
             <button className="secondary-btn logout-btn" onClick={handleLogout}>Log Out</button>
           </div>
@@ -677,16 +710,7 @@ function App() {
                   )}
                 </div>
               </div>
-              <div className="input-group checkbox-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={restaurantProfile.isOpen}
-                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, isOpen: e.target.checked })}
-                  />
-                  Restaurant is Open for Orders
-                </label>
-              </div>
+
               <button type="submit" className="secondary-btn" disabled={profileSyncing}>
                 {profileSyncing ? 'Saving...' : 'Update Settings'}
               </button>
@@ -843,7 +867,7 @@ function App() {
               <p className="empty-msg">No items added yet. Your customers will see an empty menu.</p>
             ) : (
               menuItems.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(item => (
-                <div key={item.id} className="preview-card">
+                <div key={item.id} className={`preview-card ${item.isAvailable === false ? 'unavailable' : ''}`}>
                   <div style={{ display: 'flex', gap: '15px', flexGrow: 1 }}>
                     {item.imageUrl && (
                       <div style={{ width: '80px', height: '80px', flexShrink: 0 }}>
@@ -863,7 +887,14 @@ function App() {
                   </div>
                   <div className="card-price">
                     ₹{item.price}
-                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+                      <div
+                        className={`toggle-switch-sm ${item.isAvailable !== false ? 'on' : 'off'}`}
+                        onClick={() => handleToggleDishAvailable(item.id, item.isAvailable !== false)}
+                        title={item.isAvailable !== false ? 'Mark as unavailable' : 'Mark as available'}
+                      >
+                        <div className="toggle-knob-sm"></div>
+                      </div>
                       <button className="icon-action-btn edit" title="Edit Item" onClick={() => handleEditClick(item)}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                       </button>
