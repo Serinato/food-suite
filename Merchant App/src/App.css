@@ -347,6 +347,26 @@ textarea {
   background: #f0f0ff;
 }
 
+.delete-image-btn {
+  background: #ffeaea;
+  border: 1px solid #ff4d4d;
+  color: #ff4d4d;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-image-btn:hover {
+  background: #ff4d4d;
+  color: #fff;
+}
+
 .or-divider {
   text-align: center;
   font-size: 0.7rem;

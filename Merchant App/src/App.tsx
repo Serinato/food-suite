@@ -19,7 +19,7 @@ import {
 import type { User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { scanMenuFromImage } from './aiService';
-import { Camera, Image as ImageIcon } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
 import './App.css';
 
 interface MenuItem {
@@ -661,9 +661,19 @@ function App() {
                 {/* Live Customer Preview */}
                 {restaurantProfile.image && (
                   <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginTop: 0, marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      Customer App Preview
-                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Customer App Preview
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setRestaurantProfile({ ...restaurantProfile, image: '' }); setUploadSuccess(false); }}
+                        className="delete-image-btn"
+                        title="Remove Header Image"
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </div>
                     <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
                       <img src={restaurantProfile.image} alt="Restaurant Header" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }}></div>
@@ -883,8 +893,23 @@ function App() {
                   </label>
                 </div>
                 {newItem.imageUrl && (
-                  <div style={{ marginTop: '10px', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)' }}>
-                    <img src={newItem.imageUrl} alt="Dish preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Dish Image Preview
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setNewItem({ ...newItem, imageUrl: '' }); setDishImageSuccess(false); }}
+                        className="delete-image-btn"
+                        title="Remove Dish Image"
+                      >
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    </div>
+                    <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
+                      <img src={newItem.imageUrl} alt="Dish preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
                   </div>
                 )}
               </div>
