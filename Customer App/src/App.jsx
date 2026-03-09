@@ -34,21 +34,42 @@ const CATEGORIES = ["Veg", "Non-Veg", "Starters", "Main Course", "Desserts", "Be
 import './App.css';
 
 // --- Home Components ---
-const Header = () => (
-  <header className="header">
-    <div className="location-group">
-      <span className="delivering-label">DELIVERING TO</span>
-      <div className="location-value">
-        <MapPin size={16} color="var(--accent-primary)" />
-        <span>Kolshet, Thane</span>
-        <span style={{ fontSize: '10px' }}>▼</span>
+const Header = ({ userProfile, onClickLocation }) => {
+  const addresses = userProfile?.addresses || [];
+  const defaultIdx = userProfile?.defaultAddressIndex || 0;
+  const currentAddress = addresses[defaultIdx];
+
+  let mainText = "Set Location";
+  if (currentAddress) {
+    if (currentAddress.googleAddress) {
+      // Try to get a shorter version of the address (e.g., first two parts)
+      const parts = currentAddress.googleAddress.split(',');
+      mainText = parts.length > 1 ? `${parts[0]}, ${parts[1]}` : parts[0];
+    } else if (currentAddress.landmark) {
+      mainText = currentAddress.landmark;
+    } else if (currentAddress.flatNo) {
+      mainText = `Flat ${currentAddress.flatNo}`;
+    }
+  } else {
+    mainText = "Kolshet, Thane"; // Fallback/Default
+  }
+
+  return (
+    <header className="header">
+      <div className="location-group" onClick={onClickLocation} style={{ cursor: 'pointer' }}>
+        <span className="delivering-label">DELIVERING TO</span>
+        <div className="location-value active-location-transition">
+          <MapPin size={16} color="var(--accent-primary)" />
+          <span className="truncate" style={{ maxWidth: '180px' }}>{mainText}</span>
+          <span style={{ fontSize: '10px', marginLeft: '2px' }}>▼</span>
+        </div>
       </div>
-    </div>
-    <div className="notification-bell">
-      <Bell size={18} />
-    </div>
-  </header>
-);
+      <div className="notification-bell">
+        <Bell size={18} />
+      </div>
+    </header>
+  );
+};
 
 const SearchBar = () => (
   <div className="search-container">
@@ -1444,7 +1465,7 @@ function App() {
         return (
           <div className="app-container">
             <div className="home-header-fixed">
-              <Header />
+              <Header userProfile={userProfile} onClickLocation={handleChangeAddress} />
               <SearchBar />
               <FilterPills />
               <div className="section-header">
