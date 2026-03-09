@@ -29,6 +29,7 @@ import {
   Check,
   Briefcase,
   Tag,
+  Banknote,
 } from 'lucide-react';
 const CATEGORIES = ["Veg", "Non-Veg", "Starters", "Main Course", "Desserts", "Beverages"];
 import './App.css';
@@ -481,6 +482,20 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder, userProfile, onChangeAddress
               <p className="card-sub-text">Visa, Mastercard, RuPay</p>
             </div>
             {selectedPayment === 'CARD' && <CheckCircle2 className="check-circle" size={20} />}
+          </div>
+
+          <div
+            className={`selection-card ${selectedPayment === 'COD' ? 'selected' : ''}`}
+            onClick={() => setSelectedPayment('COD')}
+          >
+            <div className="icon-wrapper-yellow">
+              <Banknote size={20} />
+            </div>
+            <div className="card-text-group">
+              <h4 className="card-main-text">Cash on Delivery</h4>
+              <p className="card-sub-text">Pay when you receive the order</p>
+            </div>
+            {selectedPayment === 'COD' && <CheckCircle2 className="check-circle" size={20} />}
           </div>
         </div>
       </div>
