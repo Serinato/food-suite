@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, ChevronRight, Smartphone } from 'lucide-react';
 import { auth } from './firebase';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { RecaptchaVerifier, signInWithPhoneNumber, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const AuthPage = ({ onBack, onAuthSuccess }) => {
     const [phoneNumber, setPhoneNumber] = useState('');
@@ -96,6 +96,22 @@ const AuthPage = ({ onBack, onAuthSuccess }) => {
         }
     };
 
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            console.log('Successfully signed in with Google:', result.user.uid);
+            onAuthSuccess(result.user);
+        } catch (err) {
+            console.error('Error with Google Sign-In:', err);
+            setError('Google Sign-In failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="auth-page fade-in">
             <div className="auth-header">
@@ -148,6 +164,22 @@ const AuthPage = ({ onBack, onAuthSuccess }) => {
                         >
                             {loading ? 'Sending OTP...' : 'Continue'}
                             {!loading && <ChevronRight size={18} />}
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0', width: '100%' }}>
+                            <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                            <span style={{ margin: '0 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>OR</span>
+                            <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                        </div>
+
+                        <button
+                            className="place-order-btn"
+                            onClick={handleGoogleLogin}
+                            disabled={loading}
+                            style={{ background: 'white', color: 'black', border: '1px solid #ccc' }}
+                        >
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style={{ width: 18, marginRight: 8 }} />
+                            Continue with Google
                         </button>
                     </div>
                 ) : (

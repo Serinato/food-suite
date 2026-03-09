@@ -554,7 +554,7 @@ const TrackingPage = ({ onBack, restaurantName }) => {
 };
 
 // --- Profile Page Component ---
-const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile }) => {
+const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSignOut }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(userProfile?.name || '');
   const [editPhone, setEditPhone] = useState(userProfile?.phone || '');
@@ -661,7 +661,7 @@ const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile }) =>
           </div>
 
           <div className="account-actions">
-            <div className="danger-card">
+            <div className="danger-card" onClick={onSignOut}>
               <LogOut size={20} />
               <span className="danger-text">Sign Out</span>
             </div>
@@ -849,8 +849,10 @@ const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
   };
 
   const handleSave = async () => {
-    if (!formGoogleAddress.trim()) { setFormError('Please search and select a location'); return; }
-    if (!formFlatNo.trim()) { setFormError('Flat / House number is required'); return; }
+    if (!formGoogleAddress.trim() && !formFlatNo.trim()) {
+      setFormError('Please provide either a Location Search or a Flat/House No.');
+      return;
+    }
 
     const address = {
       label: formLabel,
@@ -1141,7 +1143,7 @@ const AddressPicker = ({ addresses, defaultIdx, onSelect, onClose }) => {
 // --- Main App Component ---
 import { db, auth } from './firebase';
 import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getProfile, createProfile, updateProfile, setDefaultAddress } from './userProfileService.js';
 import AuthPage from './AuthPage';
 
@@ -1407,6 +1409,18 @@ function App() {
     setCurrentPage('CHECKOUT');
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      setAuthUser(null);
+      setUserProfile(null);
+      setCart([]);
+      setCurrentPage('HOME');
+    } catch (err) {
+      console.error('Error signing out:', err);
+    }
+  };
+
   const renderContent = () => {
     // Format cloud restaurants for the UI
     const liveRestaurants = restaurants.map(rest => {
@@ -1486,6 +1500,7 @@ function App() {
               onMenuItemClick={handleProfileMenuClick}
               userProfile={userProfile}
               onEditProfile={handleEditProfile}
+              onSignOut={handleSignOut}
             />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>

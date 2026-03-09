@@ -52,12 +52,17 @@ export async function updateProfile(uid, partial) {
  * @returns {Promise<boolean>} success
  */
 export async function addAddress(uid, address) {
-    const profile = await getProfile(uid);
-    if (!profile) return false;
+    let profile = await getProfile(uid);
 
-    // Default to empty array if addresses field is missing (for older profiles)
+    // If no profile exists, we'll create a skeleton one
+    if (!profile) {
+        profile = {
+            addresses: [],
+            defaultAddressIndex: 0
+        };
+    }
+
     const currentAddresses = profile.addresses || [];
-
     if (currentAddresses.length >= MAX_ADDRESSES) return false;
 
     const addresses = [...currentAddresses, address];
