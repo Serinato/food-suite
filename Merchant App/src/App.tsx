@@ -19,6 +19,7 @@ import {
 import type { User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { scanMenuFromImage } from './aiService';
+import { Camera, Image as ImageIcon } from 'lucide-react';
 import './App.css';
 
 interface MenuItem {
@@ -626,7 +627,33 @@ function App() {
                       background: uploadSuccess ? '#e1f9eb' : ''
                     }}
                   >
-                    {uploadingImage ? '⏳ Uploading to Cloud...' : uploadSuccess ? '✅ Upload Complete!' : '📁 Choose File'}
+                    <div className="upload-label-content">
+                      <ImageIcon size={18} />
+                      {uploadingImage ? 'Uploading...' : uploadSuccess ? 'Uploaded!' : 'Gallery'}
+                    </div>
+                  </label>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleImageUpload}
+                    id="header-image-camera"
+                    className="file-input-hidden"
+                  />
+                  <label
+                    htmlFor="header-image-camera"
+                    className="upload-label camera-label"
+                    style={{
+                      borderColor: uploadSuccess ? '#1ea97c' : '',
+                      color: uploadSuccess ? '#1ea97c' : '',
+                      background: uploadSuccess ? '#e1f9eb' : ''
+                    }}
+                  >
+                    <div className="upload-label-content">
+                      <Camera size={18} />
+                      {uploadingImage ? 'Uploading...' : uploadSuccess ? 'Done!' : 'Camera'}
+                    </div>
                   </label>
 
                 </div>

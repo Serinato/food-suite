@@ -305,8 +305,8 @@ textarea {
 }
 
 .image-options {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
@@ -328,10 +328,23 @@ textarea {
   color: var(--text-light);
 }
 
+.upload-label-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .upload-label:hover {
   border-color: var(--primary);
   color: var(--primary);
   background: #fff;
+}
+
+.camera-label:hover {
+  border-color: #6c5ce7;
+  color: #6c5ce7;
+  background: #f0f0ff;
 }
 
 .or-divider {

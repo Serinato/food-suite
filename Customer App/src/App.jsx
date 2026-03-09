@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   MapPin,
   Bell,
@@ -21,17 +21,14 @@ import {
   Navigation,
   Phone,
   MessageCircle,
-  Camera,
-  Map,
-  CreditCard,
-  Settings,
-  HelpCircle,
   LogOut,
   Trash2,
-  MessageSquare,
   History,
   Edit,
-  Mail
+  X,
+  Check,
+  Briefcase,
+  Tag,
 } from 'lucide-react';
 const CATEGORIES = ["Veg", "Non-Veg", "Starters", "Main Course", "Desserts", "Beverages"];
 import './App.css';
@@ -155,7 +152,6 @@ const BottomNav = ({ activeTab, onTabClick }) => {
 const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFromCart, cart, onViewCart }) => {
   const [activeTab, setActiveTab] = useState('Popular');
 
-
   const getItemCount = (itemId) => {
     return cart.filter(i => i.id === itemId).length;
   };
@@ -268,8 +264,82 @@ const RestaurantDetail = ({ restaurant, items, onBack, onAddToCart, onRemoveFrom
   );
 };
 
+// --- Profile Setup Modal ---
+const ProfileSetupModal = ({ onSave, onClose }) => {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError('Please enter your name'); return; }
+    if (!phone.trim()) { setError('Please enter your phone number'); return; }
+
+    // Validate Indian phone
+    const { validatePhone } = await import('./userProfileService.js');
+    const normalized = validatePhone(phone);
+    if (!normalized) {
+      setError('Please enter a valid 10-digit Indian phone number');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    await onSave({ name: name.trim(), phone: normalized });
+    setSaving(false);
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-sheet">
+        <div className="modal-handle"></div>
+        <h3 className="modal-title">Welcome! Let's set up your profile</h3>
+        <p className="modal-subtitle">We need your details to deliver your order</p>
+
+        {error && <div className="modal-error">{error}</div>}
+
+        <div className="modal-field">
+          <label className="modal-label">Your Name</label>
+          <input
+            type="text"
+            className="modal-input"
+            placeholder="Enter your full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        <div className="modal-field">
+          <label className="modal-label">Phone Number</label>
+          <div className="modal-phone-row">
+            <span className="modal-phone-prefix">+91</span>
+            <input
+              type="tel"
+              className="modal-input"
+              placeholder="98765 43210"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              maxLength={12}
+            />
+          </div>
+        </div>
+
+        <button className="modal-save-btn" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : 'Continue'}
+          {!saving && <ChevronRight size={18} />}
+        </button>
+
+        <button className="modal-skip-btn" onClick={onClose}>
+          Skip for now
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // --- Checkout Page Component ---
-const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
+const CheckoutPage = ({ cart, onBack, onPlaceOrder, userProfile, onChangeAddress }) => {
   const [selectedPayment, setSelectedPayment] = useState('UPI');
   const subtotal = cart.reduce((total, item) => total + item.price, 0);
   const deliveryFee = 45;
@@ -283,6 +353,8 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
     return acc;
   }, {});
 
+  const defaultAddress = userProfile?.addresses?.[userProfile?.defaultAddressIndex];
+
   return (
     <div className="checkout-page fade-in">
       <div className="checkout-header">
@@ -295,17 +367,34 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
       <div className="checkout-section">
         <div className="checkout-section-title">
           <span>Delivery Address</span>
-          <span className="change-link">Change</span>
+          <span className="change-link" onClick={onChangeAddress}>Change</span>
         </div>
-        <div className="selection-card">
-          <div className="icon-wrapper-yellow">
-            <MapPin size={20} />
+        {defaultAddress ? (
+          <div className="selection-card">
+            <div className="icon-wrapper-yellow">
+              <MapPin size={20} />
+            </div>
+            <div className="card-text-group">
+              <h4 className="card-main-text">{defaultAddress.label}</h4>
+              <p className="card-sub-text">
+                {defaultAddress.flatNo && `${defaultAddress.flatNo}, `}
+                {defaultAddress.tower && `${defaultAddress.tower}, `}
+                {defaultAddress.floor && `Floor ${defaultAddress.floor}, `}
+                {defaultAddress.googleAddress}
+              </p>
+            </div>
           </div>
-          <div className="card-text-group">
-            <h4 className="card-main-text">Home</h4>
-            <p className="card-sub-text">Hiranandani Estate, Kolshet Road, Thane West, Maharashtra 400607</p>
+        ) : (
+          <div className="selection-card" onClick={onChangeAddress} style={{ cursor: 'pointer' }}>
+            <div className="icon-wrapper-yellow">
+              <Plus size={20} />
+            </div>
+            <div className="card-text-group">
+              <h4 className="card-main-text">Add Delivery Address</h4>
+              <p className="card-sub-text">Please add an address to continue</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="checkout-section">
@@ -343,7 +432,6 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
       <div className="checkout-section">
         <div className="checkout-section-title">
           <span>Payment Method</span>
-          <span className="change-link">Add New</span>
         </div>
         <div className="payment-list">
           <div
@@ -369,7 +457,7 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
             </div>
             <div className="card-text-group">
               <h4 className="card-main-text">Credit / Debit Card</h4>
-              <p className="card-sub-text">**** **** **** 4242</p>
+              <p className="card-sub-text">Visa, Mastercard, RuPay</p>
             </div>
             {selectedPayment === 'CARD' && <CheckCircle2 className="check-circle" size={20} />}
           </div>
@@ -377,8 +465,13 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
       </div>
 
       <div className="place-order-wrapper">
-        <button className="place-order-btn" onClick={onPlaceOrder}>
-          Place Order • ₹{total.toFixed(2)}
+        <button
+          className="place-order-btn"
+          onClick={onPlaceOrder}
+          disabled={!defaultAddress}
+          style={!defaultAddress ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+        >
+          {!defaultAddress ? 'Add Address to Continue' : `Place Order • ₹${total.toFixed(2)}`}
           <ChevronRight size={18} />
         </button>
         <p className="terms-text">By placing order you agree to our Terms & Conditions</p>
@@ -389,7 +482,7 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder }) => {
 
 // --- Tracking Page Component ---
 const TrackingPage = ({ onBack, restaurantName }) => {
-  const [progress, setProgress] = useState(70); // Mock progress
+  const [progress, setProgress] = useState(70);
 
   return (
     <div className="tracking-page fade-in">
@@ -461,14 +554,34 @@ const TrackingPage = ({ onBack, restaurantName }) => {
 };
 
 // --- Profile Page Component ---
-const ProfilePage = ({ onBack, onMenuItemClick }) => {
+const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(userProfile?.name || '');
+  const [editPhone, setEditPhone] = useState(userProfile?.phone || '');
+  const [editError, setEditError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setEditName(userProfile?.name || '');
+    setEditPhone(userProfile?.phone || '');
+  }, [userProfile]);
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) { setEditError('Name is required'); return; }
+    const { validatePhone } = await import('./userProfileService.js');
+    const normalized = validatePhone(editPhone);
+    if (!normalized) { setEditError('Enter a valid 10-digit Indian number'); return; }
+
+    setSaving(true);
+    setEditError('');
+    await onEditProfile({ name: editName.trim(), phone: normalized });
+    setSaving(false);
+    setIsEditing(false);
+  };
+
   const menuItems = [
-    { id: 'ADDRESS', label: 'Address and Contact Details', icon: MapPin },
+    { id: 'ADDRESS', label: 'Saved Addresses', icon: MapPin },
     { id: 'HISTORY', label: 'Order History', icon: History },
-    { id: 'PAYMENTS', label: 'Payment Methods', icon: CreditCard },
-    { id: 'NOTIFICATIONS', label: 'Notification Settings', icon: Bell },
-    { id: 'FEEDBACK', label: 'Feedback', icon: MessageSquare },
-    { id: 'SUPPORT', label: 'Help & Support', icon: HelpCircle },
   ];
 
   return (
@@ -478,59 +591,83 @@ const ProfilePage = ({ onBack, onMenuItemClick }) => {
           <ArrowLeft size={18} />
         </div>
         <h2 className="checkout-title">My Profile</h2>
-        <span className="edit-btn">Edit</span>
+        {!isEditing ? (
+          <span className="edit-btn" onClick={() => setIsEditing(true)}>Edit</span>
+        ) : (
+          <span className="edit-btn" onClick={() => setIsEditing(false)}>Cancel</span>
+        )}
       </div>
 
       <div className="profile-identity">
         <div className="avatar-container">
-          <img
-            src="https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=200"
-            alt="user"
-            className="profile-img"
-          />
-          <div className="camera-badge">
-            <Camera size={14} />
+          <div className="profile-avatar-placeholder">
+            <User size={36} color="var(--accent-primary)" />
           </div>
         </div>
-        <div className="user-text-center">
-          <h2 className="user-name-large">Arjun Mehta</h2>
-          <p className="user-email-small">arjun.mehta@example.com</p>
-        </div>
-      </div>
 
-      <div className="stats-row">
-        <div className="stat-box">
-          <span className="stat-val">12</span>
-          <span className="stat-label">Orders</span>
-        </div>
-        <div className="stat-box">
-          <span className="stat-val">₹450</span>
-          <span className="stat-label">Wallet</span>
-        </div>
-      </div>
-
-      <div className="menu-list">
-        {menuItems.map((item, index) => (
-          <div key={index} className="menu-card" onClick={() => onMenuItemClick(item.id)}>
-            <div className="menu-icon-bg">
-              <item.icon size={20} />
+        {!isEditing ? (
+          <div className="user-text-center">
+            <h2 className="user-name-large">{userProfile?.name || 'Guest'}</h2>
+            <p className="user-email-small">{userProfile?.phone || 'No phone set'}</p>
+          </div>
+        ) : (
+          <div className="profile-edit-form">
+            {editError && <div className="modal-error">{editError}</div>}
+            <div className="modal-field">
+              <label className="modal-label">Name</label>
+              <input
+                type="text"
+                className="modal-input"
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+              />
             </div>
-            <span className="menu-title-text">{item.label}</span>
-            <ChevronRight className="menu-chevron" size={18} />
+            <div className="modal-field">
+              <label className="modal-label">Phone</label>
+              <div className="modal-phone-row">
+                <span className="modal-phone-prefix">+91</span>
+                <input
+                  type="tel"
+                  className="modal-input"
+                  value={editPhone}
+                  onChange={e => setEditPhone(e.target.value)}
+                />
+              </div>
+            </div>
+            <button
+              className="modal-save-btn"
+              onClick={handleSaveEdit}
+              disabled={saving}
+              style={{ marginTop: '8px' }}
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
           </div>
-        ))}
+        )}
       </div>
 
-      <div className="account-actions">
-        <div className="danger-card">
-          <LogOut size={20} />
-          <span className="danger-text">Sign Out</span>
-        </div>
-        <div className="danger-card">
-          <Trash2 size={20} />
-          <span className="danger-text">Delete Account</span>
-        </div>
-      </div>
+      {!isEditing && (
+        <>
+          <div className="menu-list">
+            {menuItems.map((item, index) => (
+              <div key={index} className="menu-card" onClick={() => onMenuItemClick(item.id)}>
+                <div className="menu-icon-bg">
+                  <item.icon size={20} />
+                </div>
+                <span className="menu-title-text">{item.label}</span>
+                <ChevronRight className="menu-chevron" size={18} />
+              </div>
+            ))}
+          </div>
+
+          <div className="account-actions">
+            <div className="danger-card">
+              <LogOut size={20} />
+              <span className="danger-text">Sign Out</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -541,32 +678,29 @@ const OrderHistoryPage = ({ onBack }) => {
     {
       id: '#4421',
       restaurant: 'The Pizza Project - Downtown',
-      logo: RESTAURANTS[0].image,
+      logo: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
       status: 'Delivered',
       date: 'Oct 24, 7:30 PM',
       items: '1x Margherita Classic, 1x Coke Zero, 1x Garlic Bread',
       price: 650.00,
-      canRate: true
     },
     {
       id: '#4398',
       restaurant: 'The Pizza Project - Uptown',
-      logo: RESTAURANTS[0].image,
+      logo: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
       status: 'Delivered',
       date: 'Oct 15, 8:15 PM',
       items: '2x Pepperoni Feast, 2x Large Coke',
       price: 1240.00,
-      canRate: true
     },
     {
       id: '#4350',
       restaurant: 'The Pizza Project - Downtown',
-      logo: RESTAURANTS[0].image,
+      logo: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
       status: 'Cancelled',
       date: 'Sep 30, 6:45 PM',
       items: '1x Veggie Supreme, 1x Garlic Bread',
       price: 450.00,
-      canRate: false
     }
   ];
 
@@ -577,14 +711,7 @@ const OrderHistoryPage = ({ onBack }) => {
           <ArrowLeft size={18} />
         </div>
         <h2 className="checkout-title">Order History</h2>
-        <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          <Settings size={18} />
-        </div>
-      </div>
-
-      <div className="search-container">
-        <Search className="search-icon" size={18} />
-        <input type="text" className="search-input" placeholder="Search past orders..." />
+        <div style={{ width: '40px' }}></div>
       </div>
 
       <div className="orders-list">
@@ -628,88 +755,395 @@ const OrderHistoryPage = ({ onBack }) => {
   );
 };
 
-// --- Address & Contact Page Component ---
-const AddressPage = ({ onBack }) => {
-  const addresses = [
-    { id: 1, type: 'Home', isDefault: true, detail: 'Flat 402, Sunshine Apartments, Indiranagar, Bengaluru, KA 560038', icon: HomeIcon },
-    { id: 2, type: 'Work', isDefault: false, detail: 'WeWork Galaxy, 43 Residency Road, Shanthala Nagar, Ashok Nagar, Bengaluru, KA 560025', icon: CardIcon },
-    { id: 3, type: 'Parents\' House', isDefault: false, detail: '12th Main Rd, 4th Block, Jayanagar, Bengaluru, KA 560011', icon: MapPin },
-  ];
+// --- Address Page Component ---
+const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [editIndex, setEditIndex] = useState(null); // null = adding new; number = editing
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
+  // Form state
+  const [formLabel, setFormLabel] = useState('Home');
+  const [formGoogleAddress, setFormGoogleAddress] = useState('');
+  const [formFlatNo, setFormFlatNo] = useState('');
+  const [formTower, setFormTower] = useState('');
+  const [formFloor, setFormFloor] = useState('');
+  const [formLandmark, setFormLandmark] = useState('');
+  const [formLat, setFormLat] = useState(null);
+  const [formLng, setFormLng] = useState(null);
+  const [formError, setFormError] = useState('');
+
+  const autocompleteRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const addresses = userProfile?.addresses || [];
+  const defaultIdx = userProfile?.defaultAddressIndex || 0;
+  const atLimit = addresses.length >= 4;
+
+  // Google Places Autocomplete
+  const setupAutocomplete = useCallback((node) => {
+    if (!node || autocompleteRef.current) return;
+    inputRef.current = node;
+
+    const tryAttach = () => {
+      if (!window.google?.maps?.places) return false;
+      const ac = new google.maps.places.Autocomplete(node, {
+        types: ['establishment', 'geocode'],
+        componentRestrictions: { country: 'in' },
+        fields: ['formatted_address', 'geometry', 'name'],
+      });
+      ac.addListener('place_changed', () => {
+        const place = ac.getPlace();
+        if (!place.geometry?.location) return;
+        const addr = place.name
+          ? `${place.name}, ${place.formatted_address}`
+          : place.formatted_address || '';
+        setFormGoogleAddress(addr);
+        setFormLat(place.geometry.location.lat());
+        setFormLng(place.geometry.location.lng());
+      });
+      autocompleteRef.current = ac;
+      return true;
+    };
+
+    if (tryAttach()) return;
+    const interval = setInterval(() => {
+      if (tryAttach()) clearInterval(interval);
+    }, 300);
+    setTimeout(() => clearInterval(interval), 10000);
+  }, []);
+
+  const resetForm = () => {
+    setFormLabel('Home');
+    setFormGoogleAddress('');
+    setFormFlatNo('');
+    setFormTower('');
+    setFormFloor('');
+    setFormLandmark('');
+    setFormLat(null);
+    setFormLng(null);
+    setFormError('');
+    autocompleteRef.current = null;
+  };
+
+  const handleOpenNew = () => {
+    resetForm();
+    setEditIndex(null);
+    setShowForm(true);
+  };
+
+  const handleOpenEdit = (idx) => {
+    const addr = addresses[idx];
+    setFormLabel(addr.label);
+    setFormGoogleAddress(addr.googleAddress);
+    setFormFlatNo(addr.flatNo || '');
+    setFormTower(addr.tower || '');
+    setFormFloor(addr.floor || '');
+    setFormLandmark(addr.landmark || '');
+    setFormLat(addr.latitude || null);
+    setFormLng(addr.longitude || null);
+    setFormError('');
+    setEditIndex(idx);
+    setShowForm(true);
+    autocompleteRef.current = null;
+  };
+
+  const handleSave = async () => {
+    if (!formGoogleAddress.trim()) { setFormError('Please search and select a location'); return; }
+    if (!formFlatNo.trim()) { setFormError('Flat / House number is required'); return; }
+
+    const address = {
+      label: formLabel,
+      googleAddress: formGoogleAddress,
+      flatNo: formFlatNo.trim(),
+      tower: formTower.trim(),
+      floor: formFloor.trim(),
+      landmark: formLandmark.trim(),
+      latitude: formLat || 0,
+      longitude: formLng || 0,
+    };
+
+    setSaving(true);
+    setFormError('');
+
+    try {
+      const svc = await import('./userProfileService.js');
+
+      if (!uid) {
+        setFormError('User not authenticated.');
+        setSaving(false);
+        return;
+      }
+
+      if (editIndex !== null) {
+        await svc.updateAddress(uid, editIndex, address);
+      } else {
+        const success = await svc.addAddress(uid, address);
+        if (!success) { setFormError('Failed to add address (profile might not exist or limit reached).'); setSaving(false); return; }
+      }
+
+      await onProfileUpdated();
+      setShowForm(false);
+      resetForm();
+    } catch (err) {
+      console.error("Save address error:", err);
+      setFormError(err.message || 'An error occurred while saving.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+  const handleDelete = async (idx) => {
+    setDeleting(idx);
+    const svc = await import('./userProfileService.js');
+    await svc.deleteAddress(uid, idx);
+    await onProfileUpdated();
+    setDeleting(null);
+  };
+
+  const handleSetDefault = async (idx) => {
+    const svc = await import('./userProfileService.js');
+    await svc.setDefaultAddress(uid, idx);
+    await onProfileUpdated();
+  };
+
+  const labelOptions = ['Home', 'Work', 'Other'];
+  const labelIcons = { Home: HomeIcon, Work: Briefcase, Other: Tag };
+
+  // Address Form
+  if (showForm) {
+    return (
+      <div className="address-page fade-in">
+        <div className="profile-header">
+          <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => { setShowForm(false); resetForm(); }}>
+            <ArrowLeft size={18} />
+          </div>
+          <h2 className="checkout-title">{editIndex !== null ? 'Edit Address' : 'Add Address'}</h2>
+          <div style={{ width: '40px' }}></div>
+        </div>
+
+        {formError && <div className="modal-error">{formError}</div>}
+
+        {/* Google Places Search */}
+        <div className="addr-form-section">
+          <label className="modal-label">Search Location</label>
+          <div className="addr-search-wrapper">
+            <Search size={16} className="addr-search-icon" />
+            <input
+              ref={setupAutocomplete}
+              type="text"
+              className="modal-input addr-search-input"
+              placeholder="Search for area, street name..."
+              defaultValue={formGoogleAddress}
+              onChange={(e) => setFormGoogleAddress(e.target.value)}
+            />
+          </div>
+          {formGoogleAddress && (
+            <p className="addr-selected-location">
+              <MapPin size={14} color="var(--accent-primary)" />
+              <span>{formGoogleAddress}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Specifics */}
+        <div className="addr-form-section">
+          <label className="modal-label">Address Details</label>
+
+          <div className="modal-field">
+            <input
+              type="text"
+              className="modal-input"
+              placeholder="Flat / House No. *"
+              value={formFlatNo}
+              onChange={e => setFormFlatNo(e.target.value)}
+            />
+          </div>
+
+          <div className="addr-row-2col">
+            <div className="modal-field" style={{ flex: 1 }}>
+              <input
+                type="text"
+                className="modal-input"
+                placeholder="Tower / Wing"
+                value={formTower}
+                onChange={e => setFormTower(e.target.value)}
+              />
+            </div>
+            <div className="modal-field" style={{ flex: 1 }}>
+              <input
+                type="text"
+                className="modal-input"
+                placeholder="Floor"
+                value={formFloor}
+                onChange={e => setFormFloor(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="modal-field">
+            <input
+              type="text"
+              className="modal-input"
+              placeholder="Landmark (optional)"
+              value={formLandmark}
+              onChange={e => setFormLandmark(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Label Selector */}
+        <div className="addr-form-section">
+          <label className="modal-label">Save As</label>
+          <div className="addr-label-chips">
+            {labelOptions.map(opt => {
+              const Icon = labelIcons[opt];
+              return (
+                <div
+                  key={opt}
+                  className={`addr-label-chip ${formLabel === opt ? 'active' : ''}`}
+                  onClick={() => setFormLabel(opt)}
+                >
+                  <Icon size={14} />
+                  <span>{opt}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <button className="add-new-address-btn" onClick={handleSave} disabled={saving} style={{ position: 'relative', bottom: 'auto', left: 'auto', right: 'auto' }}>
+          {saving ? 'Saving...' : (editIndex !== null ? 'Update Address' : 'Save Address')}
+        </button>
+      </div>
+    );
+  }
+
+  // Address List
   return (
     <div className="address-page fade-in">
       <div className="profile-header">
         <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={onBack}>
           <ArrowLeft size={18} />
         </div>
-        <h2 className="checkout-title">Address & Contact</h2>
+        <h2 className="checkout-title">Saved Addresses</h2>
         <div style={{ width: '40px' }}></div>
       </div>
 
-      <div className="contact-section">
-        <h3 className="address-section-title">Contact Details</h3>
-        <div className="contact-card">
-          <div className="input-group">
-            <label className="input-label">Full Name</label>
-            <div className="input-field-wrapper">
-              <span className="input-text">Arjun Mehta</span>
-              <User size={16} color="var(--text-secondary)" />
-            </div>
-          </div>
-          <div className="input-group">
-            <label className="input-label">Email Address</label>
-            <div className="input-field-wrapper">
-              <span className="input-text">arjun.mehta@example.com</span>
-              <Mail size={16} color="var(--text-secondary)" />
-            </div>
-          </div>
-          <div className="input-group">
-            <label className="input-label">Phone Number</label>
-            <div className="input-field-wrapper">
-              <span className="input-text">+91 98765 43210</span>
-              <Phone size={16} color="var(--text-secondary)" />
-            </div>
-          </div>
-          <button className="update-btn">Update Contact Info</button>
+      {addresses.length === 0 ? (
+        <div className="addr-empty-state">
+          <MapPin size={40} color="var(--text-secondary)" />
+          <p>No saved addresses yet</p>
+          <span>Add an address to get started</span>
         </div>
-      </div>
-
-      <div className="addresses-section">
-        <h3 className="address-section-title">Saved Addresses</h3>
+      ) : (
         <div className="saved-addresses-list">
-          {addresses.map(addr => (
-            <div key={addr.id} className="address-card">
+          {addresses.map((addr, idx) => {
+            const Icon = labelIcons[addr.label] || MapPin;
+            return (
+              <div key={idx} className="address-card">
+                <div className="address-icon-bg">
+                  <Icon size={20} />
+                </div>
+                <div className="address-info">
+                  <div className="address-name-row">
+                    <span className="address-name">{addr.label}</span>
+                    {idx === defaultIdx && <span className="default-badge">DEFAULT</span>}
+                  </div>
+                  <p className="address-detail-text">
+                    {addr.flatNo && `${addr.flatNo}, `}
+                    {addr.tower && `${addr.tower}, `}
+                    {addr.floor && `Floor ${addr.floor}, `}
+                    {addr.googleAddress}
+                    {addr.landmark && ` (near ${addr.landmark})`}
+                  </p>
+                  {idx !== defaultIdx && (
+                    <button className="addr-set-default-btn" onClick={() => handleSetDefault(idx)}>
+                      Set as default
+                    </button>
+                  )}
+                </div>
+                <div className="address-actions">
+                  <div className="address-action-btn" onClick={() => handleOpenEdit(idx)}>
+                    <Edit size={14} />
+                  </div>
+                  <div
+                    className="address-action-btn"
+                    onClick={() => handleDelete(idx)}
+                    style={deleting === idx ? { opacity: 0.4 } : {}}
+                  >
+                    <Trash2 size={14} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!atLimit ? (
+        <button className="add-new-address-btn" onClick={handleOpenNew}>
+          <Plus size={20} />
+          Add New Address
+        </button>
+      ) : (
+        <div className="addr-limit-note">Maximum 4 addresses saved</div>
+      )}
+    </div>
+  );
+};
+
+// --- Address Picker (for Checkout) ---
+const AddressPicker = ({ addresses, defaultIdx, onSelect, onClose }) => {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-sheet">
+        <div className="modal-handle"></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 className="modal-title" style={{ margin: 0 }}>Select Address</h3>
+          <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)', width: 32, height: 32 }} onClick={onClose}>
+            <X size={16} />
+          </div>
+        </div>
+        <div className="saved-addresses-list" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+          {addresses.map((addr, idx) => (
+            <div
+              key={idx}
+              className={`address-card ${idx === defaultIdx ? 'selected-address' : ''}`}
+              onClick={() => onSelect(idx)}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="address-icon-bg">
-                <addr.icon size={20} />
+                <MapPin size={18} />
               </div>
               <div className="address-info">
                 <div className="address-name-row">
-                  <span className="address-name">{addr.type}</span>
-                  {addr.isDefault && <span className="default-badge">DEFAULT</span>}
+                  <span className="address-name">{addr.label}</span>
+                  {idx === defaultIdx && <span className="default-badge">DEFAULT</span>}
                 </div>
-                <p className="address-detail-text">{addr.detail}</p>
+                <p className="address-detail-text">
+                  {addr.flatNo && `${addr.flatNo}, `}
+                  {addr.tower && `${addr.tower}, `}
+                  {addr.googleAddress}
+                </p>
               </div>
-              <div className="address-actions">
-                <div className="address-action-btn"><Edit size={14} /></div>
-                <div className="address-action-btn"><Trash2 size={14} /></div>
-              </div>
+              {idx === defaultIdx && <Check size={18} color="var(--accent-primary)" />}
             </div>
           ))}
         </div>
       </div>
-
-      <button className="add-new-address-btn">
-        <Plus size={20} />
-        Add New Address
-      </button>
     </div>
   );
 };
+
 
 // --- Main App Component ---
 import { db, auth } from './firebase';
 import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getProfile, createProfile, updateProfile, setDefaultAddress } from './userProfileService.js';
+import AuthPage from './AuthPage';
 
 // Haversine formula: calculates distance between two lat/lng points in km
 function calcDistanceKm(lat1, lon1, lat2, lon2) {
@@ -745,18 +1179,46 @@ function App() {
   const [dbError, setDbError] = useState(null);
   const [customerLocation, setCustomerLocation] = useState(null);
 
+  // User profile state
+  const [authUser, setAuthUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [showProfileSetup, setShowProfileSetup] = useState(false);
+  const [showAddressPicker, setShowAddressPicker] = useState(false);
+  const [authRedirect, setAuthRedirect] = useState(null);
 
+  // Google Maps script loading
+  const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+  useEffect(() => {
+    if (!GOOGLE_MAPS_KEY) return;
+    if (document.getElementById('google-maps-script')) return;
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  }, [GOOGLE_MAPS_KEY]);
+
+  // Fetch user profile
+  const fetchUserProfile = useCallback(async (uid) => {
+    const profile = await getProfile(uid);
+    setUserProfile(profile);
+    return profile;
+  }, []);
 
   // 1. Unified Auth and Firestore Listener
   useEffect(() => {
     console.log("Customer App: Starting Unified Auth Flow...");
     let unsubscribeSnapshot = null;
 
-    // First, start listening for auth state changes
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         console.log("Customer App: Auth detected (UID:", user.uid, ")");
         setDebugStatus(`Auth OK: ${user.uid.substring(0, 5)}...`);
+        setAuthUser(user);
+
+        // Fetch profile
+        fetchUserProfile(user.uid);
 
         // Only start Firestore listener when auth is confirmed
         if (!unsubscribeSnapshot) {
@@ -858,12 +1320,31 @@ function App() {
   };
 
   const handlePlaceOrder = () => {
+    if (authUser?.isAnonymous) {
+      setAuthRedirect('CHECKOUT');
+      setCurrentPage('AUTH');
+      return;
+    }
+    if (!userProfile) {
+      setShowProfileSetup(true);
+      return;
+    }
+    if (!userProfile.addresses || userProfile.addresses.length === 0) {
+      setCurrentPage('PROFILE_ADDRESS');
+      return;
+    }
     setCurrentPage('TRACKING');
     setCart([]);
     window.scrollTo(0, 0);
   };
 
   const handleTabClick = (tabId) => {
+    if ((tabId === 'PROFILE' || tabId === 'ORDERS') && authUser?.isAnonymous) {
+      setAuthRedirect(tabId);
+      setCurrentPage('AUTH');
+      window.scrollTo(0, 0);
+      return;
+    }
     setCurrentPage(tabId);
     window.scrollTo(0, 0);
   };
@@ -877,6 +1358,53 @@ function App() {
       console.log('Clicked menu:', menuId);
     }
     window.scrollTo(0, 0);
+  };
+
+  // Profile handlers
+  const handleProfileSetupSave = async ({ name, phone }) => {
+    if (!authUser) return;
+    await createProfile(authUser.uid, { name, phone });
+    await fetchUserProfile(authUser.uid);
+    setShowProfileSetup(false);
+  };
+
+  const handleEditProfile = async (partial) => {
+    if (!authUser) return;
+    await updateProfile(authUser.uid, partial);
+    await fetchUserProfile(authUser.uid);
+  };
+
+  const handleProfileUpdated = async () => {
+    if (!authUser) return;
+    await fetchUserProfile(authUser.uid);
+  };
+
+  const handleChangeAddress = () => {
+    if (!userProfile?.addresses?.length) {
+      setCurrentPage('PROFILE_ADDRESS');
+      return;
+    }
+    setShowAddressPicker(true);
+  };
+
+  const handleAddressSelect = async (idx) => {
+    if (!authUser) return;
+    await setDefaultAddress(authUser.uid, idx);
+    await fetchUserProfile(authUser.uid);
+    setShowAddressPicker(false);
+  };
+
+  const handleGoToCheckout = () => {
+    if (authUser?.isAnonymous) {
+      setAuthRedirect('CHECKOUT');
+      setCurrentPage('AUTH');
+      return;
+    }
+    if (!userProfile) {
+      setShowProfileSetup(true);
+      return;
+    }
+    setCurrentPage('CHECKOUT');
   };
 
   const renderContent = () => {
@@ -956,6 +1484,8 @@ function App() {
             <ProfilePage
               onBack={() => setCurrentPage('HOME')}
               onMenuItemClick={handleProfileMenuClick}
+              userProfile={userProfile}
+              onEditProfile={handleEditProfile}
             />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>
@@ -964,7 +1494,12 @@ function App() {
       case 'PROFILE_ADDRESS':
         return (
           <div className="app-container" style={{ padding: 0 }}>
-            <AddressPage onBack={() => setCurrentPage('PROFILE')} />
+            <AddressPage
+              onBack={() => setCurrentPage('PROFILE')}
+              userProfile={userProfile}
+              uid={authUser?.uid}
+              onProfileUpdated={handleProfileUpdated}
+            />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>
         );
@@ -987,10 +1522,10 @@ function App() {
               onAddToCart={handleAddToCart}
               onRemoveFromCart={handleRemoveFromCart}
               cart={cart}
-              onViewCart={() => setCurrentPage('CHECKOUT')}
+              onViewCart={handleGoToCheckout}
             />
             {cart.length > 0 && (
-              <div className="cart-floating-bar" onClick={() => setCurrentPage('CHECKOUT')}>
+              <div className="cart-floating-bar" onClick={handleGoToCheckout}>
                 <div className="cart-left">
                   <span className="cart-items-count">{cart.length} Items</span>
                   <span>View Cart</span>
@@ -1004,6 +1539,23 @@ function App() {
           </div>
         ) : null;
 
+      case 'AUTH':
+        return (
+          <div className="app-container" style={{ padding: 0 }}>
+            <AuthPage
+              onBack={() => setCurrentPage('HOME')}
+              onAuthSuccess={(user) => {
+                if (authRedirect) {
+                  setCurrentPage(authRedirect);
+                  setAuthRedirect(null);
+                } else {
+                  setCurrentPage('HOME');
+                }
+              }}
+            />
+          </div>
+        );
+
       case 'CHECKOUT':
         return (
           <div className="app-container" style={{ padding: 0 }}>
@@ -1011,6 +1563,8 @@ function App() {
               cart={cart}
               onBack={() => setCurrentPage('DETAIL')}
               onPlaceOrder={handlePlaceOrder}
+              userProfile={userProfile}
+              onChangeAddress={handleChangeAddress}
             />
           </div>
         );
@@ -1033,6 +1587,24 @@ function App() {
   return (
     <div className="full-app">
       {renderContent()}
+
+      {/* Profile Setup Modal */}
+      {showProfileSetup && (
+        <ProfileSetupModal
+          onSave={handleProfileSetupSave}
+          onClose={() => setShowProfileSetup(false)}
+        />
+      )}
+
+      {/* Address Picker Modal */}
+      {showAddressPicker && userProfile?.addresses?.length > 0 && (
+        <AddressPicker
+          addresses={userProfile.addresses}
+          defaultIdx={userProfile.defaultAddressIndex || 0}
+          onSelect={handleAddressSelect}
+          onClose={() => setShowAddressPicker(false)}
+        />
+      )}
     </div>
   );
 }
