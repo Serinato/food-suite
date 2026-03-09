@@ -853,7 +853,33 @@ function App() {
                       background: dishImageSuccess ? '#e1f9eb' : ''
                     }}
                   >
-                    {uploadingDishImage ? '⏳ Uploading...' : dishImageSuccess ? '✅ Uploaded!' : '📁 Choose Image'}
+                    <div className="upload-label-content">
+                      <ImageIcon size={18} />
+                      {uploadingDishImage ? 'Uploading...' : dishImageSuccess ? 'Uploaded!' : 'Gallery'}
+                    </div>
+                  </label>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleDishImageUpload}
+                    id="dish-image-camera"
+                    className="file-input-hidden"
+                  />
+                  <label
+                    htmlFor="dish-image-camera"
+                    className="upload-label camera-label"
+                    style={{
+                      borderColor: dishImageSuccess ? '#1ea97c' : '',
+                      color: dishImageSuccess ? '#1ea97c' : '',
+                      background: dishImageSuccess ? '#e1f9eb' : ''
+                    }}
+                  >
+                    <div className="upload-label-content">
+                      <Camera size={18} />
+                      {uploadingDishImage ? 'Uploading...' : dishImageSuccess ? 'Done!' : 'Camera'}
+                    </div>
                   </label>
                 </div>
                 {newItem.imageUrl && (
