@@ -503,7 +503,7 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder, userProfile, onChangeAddress
       <div className="place-order-wrapper">
         <button
           className="place-order-btn"
-          onClick={onPlaceOrder}
+          onClick={() => onPlaceOrder(selectedPayment)}
           disabled={!defaultAddress}
           style={!defaultAddress ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
         >
@@ -517,8 +517,37 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder, userProfile, onChangeAddress
 };
 
 // --- Tracking Page Component ---
-const TrackingPage = ({ onBack, restaurantName }) => {
-  const [progress, setProgress] = useState(70);
+const TrackingPage = ({ onBack, restaurantName, orderId }) => {
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!orderId) return;
+
+    const orderRef = doc(db, 'orders', orderId);
+    const unsubscribe = onSnapshot(orderRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setOrder({ id: snapshot.id, ...snapshot.data() });
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [orderId]);
+
+  if (loading) return <div className="loading-state"><p>Loading order details...</p></div>;
+  if (!order) return <div className="loading-state"><p>Order not found.</p></div>;
+
+  // Map status to progress percentage
+  const statusToProgress = {
+    'PLACED': 25,
+    'CONFIRMED': 50,
+    'PREPARING': 75,
+    'ON_WAY': 90,
+    'DELIVERED': 100
+  };
+
+  const progress = statusToProgress[order.status] || 25;
 
   return (
     <div className="tracking-page fade-in">
@@ -542,8 +571,10 @@ const TrackingPage = ({ onBack, restaurantName }) => {
         <div className="drag-handle"></div>
 
         <div>
-          <h2 className="arriving-text">Arriving in 12 mins</h2>
-          <p className="order-info-small">Order #4421 • {restaurantName}</p>
+          <h2 className="arriving-text">
+            {order.status === 'DELIVERED' ? 'Order Delivered!' : order.estimatedArrival ? `Arriving in ${order.estimatedArrival} mins` : 'Arriving Soon'}
+          </h2>
+          <p className="order-info-small">Order #{order.id.slice(-4)} • {order.restaurantName}</p>
         </div>
 
         <div className="stepper-container">
@@ -551,39 +582,42 @@ const TrackingPage = ({ onBack, restaurantName }) => {
             <div className="stepper-progress" style={{ width: `${progress}%` }}></div>
           </div>
           <div className="stepper-labels">
-            <span className="step-label active">Confirmed</span>
-            <span className="step-label active">Preparing</span>
-            <span className="step-label active">On Way</span>
-            <span className="step-label">Delivered</span>
+            <span className={`step-label ${['PLACED', 'CONFIRMED', 'PREPARING', 'ON_WAY', 'DELIVERED'].includes(order.status) ? 'active' : ''}`}>Placed</span>
+            <span className={`step-label ${['CONFIRMED', 'PREPARING', 'ON_WAY', 'DELIVERED'].includes(order.status) ? 'active' : ''}`}>Confirmed</span>
+            <span className={`step-label ${['PREPARING', 'ON_WAY', 'DELIVERED'].includes(order.status) ? 'active' : ''}`}>Preparing</span>
+            <span className={`step-label ${['ON_WAY', 'DELIVERED'].includes(order.status) ? 'active' : ''}`}>On Way</span>
+            <span className={`step-label ${order.status === 'DELIVERED' ? 'active' : ''}`}>Delivered</span>
           </div>
         </div>
 
         <p className="status-update-text">
-          <b>Latest update:</b> Rahul has picked up your order and is heading your way!
+          <b>Latest update:</b> {order.latestUpdate || `Your order is ${order.status.toLowerCase().replace('_', ' ')}.`}
         </p>
 
-        <div className="partner-card">
-          <img
-            src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150"
-            alt="partner"
-            className="partner-avatar"
-          />
-          <div className="partner-info">
-            <h4 className="partner-name">Rahul S.</h4>
-            <div className="partner-rating">
-              <Star size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
-              <span>4.8 • Honda Activa</span>
+        {order.deliveryPartner && (
+          <div className="partner-card">
+            <img
+              src={order.deliveryPartner.image || "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150"}
+              alt="partner"
+              className="partner-avatar"
+            />
+            <div className="partner-info">
+              <h4 className="partner-name">{order.deliveryPartner.name}</h4>
+              <div className="partner-rating">
+                <Star size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
+                <span>{order.deliveryPartner.rating} • {order.deliveryPartner.vehicle}</span>
+              </div>
+            </div>
+            <div className="partner-actions">
+              <div className="action-btn-circle call">
+                <Phone size={18} />
+              </div>
+              <div className="action-btn-circle msg">
+                <MessageCircle size={18} />
+              </div>
             </div>
           </div>
-          <div className="partner-actions">
-            <div className="action-btn-circle call">
-              <Phone size={18} />
-            </div>
-            <div className="action-btn-circle msg">
-              <MessageCircle size={18} />
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -1178,7 +1212,7 @@ const AddressPicker = ({ addresses, defaultIdx, onSelect, onClose }) => {
 
 // --- Main App Component ---
 import { db, auth } from './firebase';
-import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, getDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getProfile, createProfile, updateProfile, setDefaultAddress } from './userProfileService.js';
 import AuthPage from './AuthPage';
@@ -1208,6 +1242,7 @@ function formatDistance(km) {
 function App() {
   const [currentPage, setCurrentPage] = useState('HOME');
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
+  const [activeOrderId, setActiveOrderId] = useState(null);
   const [cart, setCart] = useState([]);
   const [cloudMenu, setCloudMenu] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
@@ -1357,7 +1392,7 @@ function App() {
     }
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async (paymentMethod = 'UPI') => {
     if (authUser?.isAnonymous) {
       setAuthRedirect('CHECKOUT');
       setCurrentPage('AUTH');
@@ -1367,13 +1402,51 @@ function App() {
       setShowProfileSetup(true);
       return;
     }
-    if (!userProfile.addresses || userProfile.addresses.length === 0) {
+
+    const defaultIdx = userProfile.defaultAddressIndex || 0;
+    const deliveryAddress = userProfile.addresses?.[defaultIdx];
+
+    if (!deliveryAddress) {
       setCurrentPage('PROFILE_ADDRESS');
       return;
     }
-    setCurrentPage('TRACKING');
-    setCart([]);
-    window.scrollTo(0, 0);
+
+    // --- Create Real Order in Firestore ---
+    try {
+      console.log("Customer App: Placing order...", { restaurantId: selectedRestaurant?.id, paymentMethod });
+
+      const subtotal = cart.reduce((total, item) => total + item.price, 0);
+      const deliveryFee = 45;
+      const total = subtotal + deliveryFee;
+
+      const orderData = {
+        userId: authUser.uid,
+        userName: userProfile.name || 'Customer',
+        userPhone: userProfile.phone || '',
+        restaurantId: selectedRestaurant.id,
+        restaurantName: selectedRestaurant.name,
+        items: cart,
+        subtotal,
+        deliveryFee,
+        total,
+        paymentMethod,
+        status: 'PLACED',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        deliveryAddress: deliveryAddress
+      };
+
+      const orderRef = await addDoc(collection(db, 'orders'), orderData);
+      console.log("Customer App: Order placed successfully:", orderRef.id);
+
+      setActiveOrderId(orderRef.id);
+      setCurrentPage('TRACKING');
+      setCart([]);
+      window.scrollTo(0, 0);
+    } catch (err) {
+      console.error("Error placing order:", err);
+      alert("Failed to place order. Please try again.");
+    }
   };
 
   const handleTabClick = (tabId) => {
@@ -1440,6 +1513,10 @@ function App() {
     }
     if (!userProfile) {
       setShowProfileSetup(true);
+      return;
+    }
+    if (!userProfile.addresses || userProfile.addresses.length === 0) {
+      setCurrentPage('PROFILE_ADDRESS');
       return;
     }
     setCurrentPage('CHECKOUT');
@@ -1624,7 +1701,8 @@ function App() {
         return (
           <div className="app-container" style={{ padding: 0 }}>
             <TrackingPage
-              restaurantName={selectedRestaurant?.name || "The Pizza Project"}
+              orderId={activeOrderId}
+              restaurantName={selectedRestaurant?.name || "Restaurant"}
               onBack={() => setCurrentPage('HOME')}
             />
           </div>
