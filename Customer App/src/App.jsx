@@ -31,7 +31,7 @@ import {
   Tag,
   Banknote,
 } from 'lucide-react';
-const CATEGORIES = ["Veg", "Non-Veg", "Starters", "Main Course", "Desserts", "Beverages"];
+const CATEGORIES = ["Pure Veg", "Home Cooked", "Economy", "Premium"];
 import './App.css';
 
 // --- Home Components ---
@@ -83,15 +83,14 @@ const SearchBar = () => (
   </div>
 );
 
-const FilterPills = () => {
-  const [activeFilter, setActiveFilter] = useState(null);
+const FilterPills = ({ activeFilter, onFilterChange }) => {
   return (
     <div className="filter-pills-row">
       {CATEGORIES.map(category => (
         <div
           key={category}
           className={`filter-pill ${activeFilter === category ? 'active' : ''}`}
-          onClick={() => setActiveFilter(category)}
+          onClick={() => onFilterChange(activeFilter === category ? null : category)}
         >
           {category}
         </div>
@@ -1102,7 +1101,7 @@ const AddressPicker = ({ addresses, defaultIdx, onSelect, onClose }) => {
 
 // --- Main App Component ---
 import { db, auth } from './firebase';
-import { collection, onSnapshot, query, orderBy, getDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, getDoc, doc, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
 import { getProfile, createProfile, updateProfile, setDefaultAddress } from './userProfileService.js';
 import AuthPage from './AuthPage';
@@ -1130,17 +1129,21 @@ function formatDistance(km) {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('HOME');
-  const [selectedRestaurant, setSelectedRestaurant] = useState(null);
-  const [cart, setCart] = useState([]);
+  const [currentPage, setCurrentPage] = useState(() => localStorage.getItem('food_suite_currentPage') || 'HOME');
+  const [selectedRestaurant, setSelectedRestaurant] = useState(() => {
+    const saved = localStorage.getItem('food_suite_selectedRestaurant');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [cart, setCart] = useState(() => {
+    const saved = localStorage.getItem('food_suite_cart');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [cloudMenu, setCloudMenu] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [debugStatus, setDebugStatus] = useState('Initializing...');
   const [authError, setAuthError] = useState(null);
-  const [dbError, setDbError] = useState(null);
   const [customerLocation, setCustomerLocation] = useState(null);
-  const [placedOrderId, setPlacedOrderId] = useState(null);
+  const [placedOrderId, setPlacedOrderId] = useState(() => localStorage.getItem('food_suite_placedOrderId'));
 
   // User profile state
   const [authUser, setAuthUser] = useState(null);
@@ -1153,6 +1156,10 @@ function App() {
   // Address Modal state (now global)
   const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
   const [addressToEdit, setAddressToEdit] = useState(null);
+
+  // Filter state
+  const [activeFilter, setActiveFilter] = useState(null);
+  const [pureVegStatus, setPureVegStatus] = useState({});
 
   // Google Maps script loading
   const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -1174,6 +1181,31 @@ function App() {
     return profile;
   }, []);
 
+  // Sync state to localStorage
+  useEffect(() => {
+    localStorage.setItem('food_suite_currentPage', currentPage);
+  }, [currentPage]);
+
+  useEffect(() => {
+    if (selectedRestaurant) {
+      localStorage.setItem('food_suite_selectedRestaurant', JSON.stringify(selectedRestaurant));
+    } else {
+      localStorage.removeItem('food_suite_selectedRestaurant');
+    }
+  }, [selectedRestaurant]);
+
+  useEffect(() => {
+    localStorage.setItem('food_suite_cart', JSON.stringify(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    if (placedOrderId) {
+      localStorage.setItem('food_suite_placedOrderId', placedOrderId);
+    } else {
+      localStorage.removeItem('food_suite_placedOrderId');
+    }
+  }, [placedOrderId]);
+
   // 1. Unified Auth and Firestore Listener
   useEffect(() => {
     console.log("Customer App: Starting Unified Auth Flow...");
@@ -1182,7 +1214,6 @@ function App() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         console.log("Customer App: Auth detected (UID:", user.uid, ")");
-        setDebugStatus(`Auth OK: ${user.uid.substring(0, 5)}...`);
         setAuthUser(user);
 
         // Fetch profile
@@ -1198,21 +1229,16 @@ function App() {
             console.log("Customer App: Restaurants loaded:", list.length);
             setRestaurants(list);
             setLoading(false);
-            setDebugStatus(`Connected! Found ${list.length} kitchens.`);
           }, (error) => {
             console.error("Customer App: Firestore error:", error);
-            setDbError(error.message);
-            setDebugStatus(`DB Er: ${error.code}`);
             setLoading(false);
           });
         }
       } else {
         console.log("Customer App: User is null, attempting anonymous login...");
-        setDebugStatus('Logging in cloud anonymously...');
         signInAnonymously(auth).catch((err) => {
           console.error("Customer App: Anonymous Login FAILED:", err);
           setAuthError(err.code || err.message);
-          setDebugStatus(`Auth Failed: ${err.code}`);
           setLoading(false);
         });
       }
@@ -1257,6 +1283,29 @@ function App() {
 
     return () => unsubscribeMenu();
   }, [selectedRestaurant?.id]);
+
+  // Handle Pure Veg Filter data fetching lazily
+  useEffect(() => {
+    if (activeFilter === 'Pure Veg') {
+      restaurants.forEach(async (rest) => {
+        if (pureVegStatus[rest.id] === undefined) {
+          try {
+            const menuRef = collection(db, 'restaurants', rest.id, 'menu');
+            const snap = await getDocs(menuRef);
+            let hasNonVeg = false;
+            snap.forEach(doc => {
+              if (doc.data().isVeg === false) {
+                hasNonVeg = true;
+              }
+            });
+            setPureVegStatus(prev => ({ ...prev, [rest.id]: !hasNonVeg }));
+          } catch (err) {
+            console.error("Error fetching menu for pure veg check:", err);
+          }
+        }
+      });
+    }
+  }, [activeFilter, restaurants, pureVegStatus]);
 
 
   const handleRestaurantClick = (restaurant) => {
@@ -1444,7 +1493,12 @@ function App() {
 
   const renderContent = () => {
     // Format cloud restaurants for the UI
-    const liveRestaurants = restaurants.map(rest => {
+    let displayRestaurants = restaurants;
+    if (activeFilter === 'Pure Veg') {
+      displayRestaurants = displayRestaurants.filter(r => pureVegStatus[r.id] === true);
+    }
+
+    const liveRestaurants = displayRestaurants.map(rest => {
       const distKm = customerLocation
         ? calcDistanceKm(customerLocation.lat, customerLocation.lng, rest.latitude, rest.longitude)
         : null;
@@ -1467,13 +1521,9 @@ function App() {
             <div className="home-header-fixed">
               <Header userProfile={userProfile} onClickLocation={handleChangeAddress} />
               <SearchBar />
-              <FilterPills />
+              <FilterPills activeFilter={activeFilter} onFilterChange={setActiveFilter} />
               <div className="section-header">
                 <h2 className="section-title">Local Restaurants Managed by You</h2>
-              </div>
-              <div style={{ padding: '4px 16px', fontSize: '10px', opacity: 0.6, background: '#eee', display: 'flex', justifyContent: 'space-between' }}>
-                <span>Cloud Status: {debugStatus}</span>
-                {dbError && <span style={{ color: 'red' }}>DB Er: {dbError}</span>}
               </div>
             </div>
 
