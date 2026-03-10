@@ -901,16 +901,12 @@ const AddressFormModal = ({ isOpen, onClose, userProfile, uid, onProfileUpdated,
 };
 
 // --- Profile Page Component ---
-const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSignOut, onDeleteAccount, uid, onProfileUpdated }) => {
+const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSignOut, onDeleteAccount, uid, onProfileUpdated, onOpenAddressModal }) => {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [editName, setEditName] = useState(userProfile?.name || '');
   const [editPhone, setEditPhone] = useState(userProfile?.phone || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  // Address Modal state
-  const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
-  const [addressToEdit, setAddressToEdit] = useState(null);
 
   useEffect(() => {
     setEditName(userProfile?.name || '');
@@ -1012,7 +1008,7 @@ const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSi
                       <span className="v2-card-label">{addr.label}</span>
                       {idx === defaultIdx && <span className="v2-default-badge">DEFAULT</span>}
                       <div className="v2-card-actions">
-                        <button className="v2-action-btn" onClick={() => { setAddressToEdit({ ...addr, id: idx }); setIsAddrModalOpen(true); }}><Edit size={16} /></button>
+                        <button className="v2-action-btn" onClick={() => onOpenAddressModal({ ...addr, id: idx })}><Edit size={16} /></button>
                         <button className="v2-action-btn" onClick={() => handleDeleteAddr(idx)}><Trash2 size={16} /></button>
                       </div>
                     </div>
@@ -1031,7 +1027,7 @@ const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSi
             )}
           </div>
 
-          <button className="v2-add-new-btn-large" onClick={() => { setAddressToEdit(null); setIsAddrModalOpen(true); }}>
+          <button className="v2-add-new-btn-large" onClick={() => onOpenAddressModal(null)}>
             <Plus size={20} /> Add New Address
           </button>
         </div>
@@ -1056,14 +1052,6 @@ const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSi
         </div>
       </div>
 
-      <AddressFormModal
-        isOpen={isAddrModalOpen}
-        onClose={() => setIsAddrModalOpen(false)}
-        userProfile={userProfile}
-        uid={uid}
-        onProfileUpdated={onProfileUpdated}
-        editAddress={addressToEdit}
-      />
     </div>
   );
 };
@@ -1161,6 +1149,10 @@ function App() {
   const [showAddressPicker, setShowAddressPicker] = useState(false);
   const [authRedirect, setAuthRedirect] = useState(null);
   const [addrPageForcedNew, setAddrPageForcedNew] = useState(false);
+
+  // Address Modal state (now global)
+  const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
+  const [addressToEdit, setAddressToEdit] = useState(null);
 
   // Google Maps script loading
   const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -1390,7 +1382,8 @@ function App() {
 
   const handleChangeAddress = () => {
     if (!userProfile?.addresses?.length) {
-      setCurrentPage('PROFILE_ADDRESS');
+      setAddressToEdit(null);
+      setIsAddrModalOpen(true);
       return;
     }
     setShowAddressPicker(true);
@@ -1407,10 +1400,6 @@ function App() {
     if (authUser?.isAnonymous) {
       setAuthRedirect('CHECKOUT');
       setCurrentPage('AUTH');
-      return;
-    }
-    if (!userProfile) {
-      setShowProfileSetup(true);
       return;
     }
     setCurrentPage('CHECKOUT');
@@ -1536,6 +1525,10 @@ function App() {
               onDeleteAccount={handleDeleteAccount}
               uid={authUser?.uid}
               onProfileUpdated={handleProfileUpdated}
+              onOpenAddressModal={(addr) => {
+                setAddressToEdit(addr);
+                setIsAddrModalOpen(true);
+              }}
             />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>
@@ -1634,6 +1627,16 @@ function App() {
           onClose={() => setShowProfileSetup(false)}
         />
       )}
+
+      {/* Address Form Modal (raised like a card) */}
+      <AddressFormModal
+        isOpen={isAddrModalOpen}
+        onClose={() => setIsAddrModalOpen(false)}
+        userProfile={userProfile}
+        uid={authUser?.uid}
+        onProfileUpdated={handleProfileUpdated}
+        editAddress={addressToEdit}
+      />
 
       {/* Address Picker Modal */}
       {showAddressPicker && userProfile?.addresses?.length > 0 && (
