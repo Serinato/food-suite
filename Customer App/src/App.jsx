@@ -517,8 +517,39 @@ const CheckoutPage = ({ cart, onBack, onPlaceOrder, userProfile, onChangeAddress
 };
 
 // --- Tracking Page Component ---
-const TrackingPage = ({ onBack, restaurantName }) => {
-  const [progress, setProgress] = useState(70);
+const TrackingPage = ({ orderId, onBack, restaurantName }) => {
+  const [orderData, setOrderData] = useState(null);
+
+  useEffect(() => {
+    if (!orderId) return;
+    const unsub = onSnapshot(doc(db, 'orders', orderId), (docSnap) => {
+      if (docSnap.exists()) {
+        setOrderData({ id: docSnap.id, ...docSnap.data() });
+      }
+    });
+    return () => unsub();
+  }, [orderId]);
+
+  const stages = ['placed', 'confirmed', 'preparing', 'on_way', 'delivered'];
+  const statusLabels = {
+    'placed': 'PLACED',
+    'confirmed': 'CONFIRMED',
+    'preparing': 'PREPARING',
+    'on_way': 'ON WAY',
+    'delivered': 'DELIVERED'
+  };
+
+  const statusMessages = {
+    'placed': 'Your order is placed. Waiting for restaurant to confirm.',
+    'confirmed': 'Restaurant has confirmed your order.',
+    'preparing': 'Your food is being prepared.',
+    'on_way': 'Your order is out for delivery.',
+    'delivered': 'Your order has been delivered! Enjoy your meal.'
+  };
+
+  const currentStatus = orderData?.status || 'placed';
+  const currentIndex = stages.indexOf(currentStatus);
+  const progressPercent = currentIndex >= 0 ? (currentIndex * 100) / (stages.length - 1) : 0;
 
   return (
     <div className="tracking-page fade-in">
@@ -542,171 +573,59 @@ const TrackingPage = ({ onBack, restaurantName }) => {
         <div className="drag-handle"></div>
 
         <div>
-          <h2 className="arriving-text">Arriving in 12 mins</h2>
-          <p className="order-info-small">Order #4421 • {restaurantName}</p>
+          <h2 className="arriving-text">{currentStatus === 'delivered' ? 'Delivered' : 'Arriving Soon'}</h2>
+          <p className="order-info-small">Order #{orderId ? orderId.slice(-4).toUpperCase() : '----'} • {orderData?.restaurantName || restaurantName}</p>
         </div>
 
-        <div className="stepper-container">
-          <div className="stepper-track">
-            <div className="stepper-progress" style={{ width: `${progress}%` }}></div>
+        <div className="stepper-container" style={{ marginTop: '20px', marginBottom: '20px' }}>
+          <div className="stepper-track" style={{ height: '6px', background: '#333', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
+            <div className="stepper-progress" style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${progressPercent}%`, background: '#ffc107', transition: 'width 0.5s ease' }}></div>
           </div>
-          <div className="stepper-labels">
-            <span className="step-label active">Confirmed</span>
-            <span className="step-label active">Preparing</span>
-            <span className="step-label active">On Way</span>
-            <span className="step-label">Delivered</span>
-          </div>
-        </div>
-
-        <p className="status-update-text">
-          <b>Latest update:</b> Rahul has picked up your order and is heading your way!
-        </p>
-
-        <div className="partner-card">
-          <img
-            src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150"
-            alt="partner"
-            className="partner-avatar"
-          />
-          <div className="partner-info">
-            <h4 className="partner-name">Rahul S.</h4>
-            <div className="partner-rating">
-              <Star size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
-              <span>4.8 • Honda Activa</span>
-            </div>
-          </div>
-          <div className="partner-actions">
-            <div className="action-btn-circle call">
-              <Phone size={18} />
-            </div>
-            <div className="action-btn-circle msg">
-              <MessageCircle size={18} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- Profile Page Component ---
-const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSignOut }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(userProfile?.name || '');
-  const [editPhone, setEditPhone] = useState(userProfile?.phone || '');
-  const [editError, setEditError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setEditName(userProfile?.name || '');
-    setEditPhone(userProfile?.phone || '');
-  }, [userProfile]);
-
-  const handleSaveEdit = async () => {
-    if (!editName.trim()) { setEditError('Name is required'); return; }
-    const { validatePhone } = await import('./userProfileService.js');
-    const normalized = validatePhone(editPhone);
-    if (!normalized) { setEditError('Enter a valid 10-digit Indian number'); return; }
-
-    setSaving(true);
-    setEditError('');
-    await onEditProfile({ name: editName.trim(), phone: normalized });
-    setSaving(false);
-    setIsEditing(false);
-  };
-
-  const menuItems = [
-    { id: 'ADDRESS', label: 'Saved Addresses', icon: MapPin },
-    { id: 'HISTORY', label: 'Order History', icon: History },
-  ];
-
-  return (
-    <div className="profile-page fade-in">
-      <div className="profile-header">
-        <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={onBack}>
-          <ArrowLeft size={18} />
-        </div>
-        <h2 className="checkout-title">My Profile</h2>
-        {!isEditing ? (
-          <span className="edit-btn" onClick={() => setIsEditing(true)}>Edit</span>
-        ) : (
-          <span className="edit-btn" onClick={() => setIsEditing(false)}>Cancel</span>
-        )}
-      </div>
-
-      <div className="profile-identity">
-        <div className="avatar-container">
-          <div className="profile-avatar-placeholder">
-            <User size={36} color="var(--accent-primary)" />
-          </div>
-        </div>
-
-        {!isEditing ? (
-          <div className="user-text-center">
-            <h2 className="user-name-large">{userProfile?.name || 'Guest'}</h2>
-            <p className="user-email-small">{userProfile?.phone || 'No phone set'}</p>
-          </div>
-        ) : (
-          <div className="profile-edit-form">
-            {editError && <div className="modal-error">{editError}</div>}
-            <div className="modal-field">
-              <label className="modal-label">Name</label>
-              <input
-                type="text"
-                className="modal-input"
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-              />
-            </div>
-            <div className="modal-field">
-              <label className="modal-label">Phone</label>
-              <div className="modal-phone-row">
-                <span className="modal-phone-prefix">+91</span>
-                <input
-                  type="tel"
-                  className="modal-input"
-                  value={editPhone}
-                  onChange={e => setEditPhone(e.target.value)}
-                />
-              </div>
-            </div>
-            <button
-              className="modal-save-btn"
-              onClick={handleSaveEdit}
-              disabled={saving}
-              style={{ marginTop: '8px' }}
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {!isEditing && (
-        <>
-          <div className="menu-list">
-            {menuItems.map((item, index) => (
-              <div key={index} className="menu-card" onClick={() => onMenuItemClick(item.id)}>
-                <div className="menu-icon-bg">
-                  <item.icon size={20} />
-                </div>
-                <span className="menu-title-text">{item.label}</span>
-                <ChevronRight className="menu-chevron" size={18} />
-              </div>
+          <div className="stepper-labels" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+            {stages.map((stage, idx) => (
+              <span key={stage} className={`step-label ${idx <= currentIndex ? 'active' : ''}`} style={{ color: idx <= currentIndex ? '#ffc107' : '#888' }}>
+                {statusLabels[stage]}
+              </span>
             ))}
           </div>
+        </div>
 
-          <div className="account-actions">
-            <div className="danger-card" onClick={onSignOut}>
-              <LogOut size={20} />
-              <span className="danger-text">Sign Out</span>
+        <div style={{ backgroundColor: '#1a1a1a', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+          <p className="status-update-text" style={{ margin: 0, fontSize: '12px' }}>
+            <b>Latest update:</b> {statusMessages[currentStatus]}
+          </p>
+        </div>
+
+        {currentIndex >= 3 && (
+          <div className="partner-card">
+            <img
+              src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150"
+              alt="partner"
+              className="partner-avatar"
+            />
+            <div className="partner-info">
+              <h4 className="partner-name">Rahul S.</h4>
+              <div className="partner-rating">
+                <Star size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
+                <span>4.8 • Honda Activa</span>
+              </div>
+            </div>
+            <div className="partner-actions">
+              <div className="action-btn-circle call">
+                <Phone size={18} />
+              </div>
+              <div className="action-btn-circle msg">
+                <MessageCircle size={18} />
+              </div>
             </div>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 };
+
+
 
 // --- Order History Page Component ---
 const OrderHistoryPage = ({ onBack }) => {
@@ -791,14 +710,9 @@ const OrderHistoryPage = ({ onBack }) => {
   );
 };
 
-// --- Address Page Component ---
-const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
-  const [showForm, setShowForm] = useState(false);
-  const [editIndex, setEditIndex] = useState(null); // null = adding new; number = editing
+// --- Address Form Modal Component (Card Raising) ---
+const AddressFormModal = ({ isOpen, onClose, userProfile, uid, onProfileUpdated, editAddress }) => {
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(null);
-
-  // Form state
   const [formLabel, setFormLabel] = useState('Home');
   const [formGoogleAddress, setFormGoogleAddress] = useState('');
   const [formFlatNo, setFormFlatNo] = useState('');
@@ -812,11 +726,29 @@ const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
   const autocompleteRef = useRef(null);
   const inputRef = useRef(null);
 
-  const addresses = userProfile?.addresses || [];
-  const defaultIdx = userProfile?.defaultAddressIndex || 0;
-  const atLimit = addresses.length >= 4;
+  useEffect(() => {
+    if (editAddress) {
+      setFormLabel(editAddress.label || 'Home');
+      setFormGoogleAddress(editAddress.googleAddress || '');
+      setFormFlatNo(editAddress.flatNo || '');
+      setFormTower(editAddress.tower || '');
+      setFormFloor(editAddress.floor || '');
+      setFormLandmark(editAddress.landmark || '');
+      setFormLat(editAddress.latitude || null);
+      setFormLng(editAddress.longitude || null);
+    } else {
+      setFormLabel('Home');
+      setFormGoogleAddress('');
+      setFormFlatNo('');
+      setFormTower('');
+      setFormFloor('');
+      setFormLandmark('');
+      setFormLat(null);
+      setFormLng(null);
+    }
+    setFormError('');
+  }, [editAddress, isOpen]);
 
-  // Google Places Autocomplete
   const setupAutocomplete = useCallback((node) => {
     if (!node || autocompleteRef.current) return;
     inputRef.current = node;
@@ -849,41 +781,6 @@ const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
     setTimeout(() => clearInterval(interval), 10000);
   }, []);
 
-  const resetForm = () => {
-    setFormLabel('Home');
-    setFormGoogleAddress('');
-    setFormFlatNo('');
-    setFormTower('');
-    setFormFloor('');
-    setFormLandmark('');
-    setFormLat(null);
-    setFormLng(null);
-    setFormError('');
-    autocompleteRef.current = null;
-  };
-
-  const handleOpenNew = () => {
-    resetForm();
-    setEditIndex(null);
-    setShowForm(true);
-  };
-
-  const handleOpenEdit = (idx) => {
-    const addr = addresses[idx];
-    setFormLabel(addr.label);
-    setFormGoogleAddress(addr.googleAddress);
-    setFormFlatNo(addr.flatNo || '');
-    setFormTower(addr.tower || '');
-    setFormFloor(addr.floor || '');
-    setFormLandmark(addr.landmark || '');
-    setFormLat(addr.latitude || null);
-    setFormLng(addr.longitude || null);
-    setFormError('');
-    setEditIndex(idx);
-    setShowForm(true);
-    autocompleteRef.current = null;
-  };
-
   const handleSave = async () => {
     if (!formGoogleAddress.trim() && !formFlatNo.trim()) {
       setFormError('Please provide either a Location Search or a Flat/House No.');
@@ -902,68 +799,35 @@ const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
     };
 
     setSaving(true);
-    setFormError('');
-
     try {
       const svc = await import('./userProfileService.js');
-
-      if (!uid) {
-        setFormError('User not authenticated.');
-        setSaving(false);
-        return;
-      }
-
-      if (editIndex !== null) {
-        await svc.updateAddress(uid, editIndex, address);
+      if (editAddress?.id !== undefined) {
+        await svc.updateAddress(uid, editAddress.id, address);
       } else {
-        const success = await svc.addAddress(uid, address);
-        if (!success) { setFormError('Failed to add address (profile might not exist or limit reached).'); setSaving(false); return; }
+        await svc.addAddress(uid, address);
       }
-
       await onProfileUpdated();
-      setShowForm(false);
-      resetForm();
+      onClose();
     } catch (err) {
-      console.error("Save address error:", err);
-      setFormError(err.message || 'An error occurred while saving.');
+      setFormError(err.message || 'An error occurred.');
     } finally {
       setSaving(false);
     }
   };
 
+  if (!isOpen) return null;
 
-  const handleDelete = async (idx) => {
-    setDeleting(idx);
-    const svc = await import('./userProfileService.js');
-    await svc.deleteAddress(uid, idx);
-    await onProfileUpdated();
-    setDeleting(null);
-  };
-
-  const handleSetDefault = async (idx) => {
-    const svc = await import('./userProfileService.js');
-    await svc.setDefaultAddress(uid, idx);
-    await onProfileUpdated();
-  };
-
-  const labelOptions = ['Home', 'Work', 'Other'];
-  const labelIcons = { Home: HomeIcon, Work: Briefcase, Other: Tag };
-
-  // Address Form
-  if (showForm) {
-    return (
-      <div className="address-page fade-in">
-        <div className="profile-header">
-          <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => { setShowForm(false); resetForm(); }}>
-            <ArrowLeft size={18} />
-          </div>
-          <h2 className="checkout-title">{editIndex !== null ? 'Edit Address' : 'Add Address'}</h2>
-          <div style={{ width: '40px' }}></div>
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-handle" onClick={onClose}></div>
+        <div className="modal-header-row">
+          <h3 className="modal-title">{editAddress ? 'Edit Address' : 'Add New Address'}</h3>
+          <button className="modal-close-icon" onClick={onClose}><X size={20} /></button>
         </div>
 
         {formError && <div className="modal-error">{formError}</div>}
 
-        {/* Google Places Search */}
         <div className="addr-form-section">
           <label className="modal-label">Search Location</label>
           <div className="addr-search-wrapper">
@@ -974,160 +838,232 @@ const AddressPage = ({ onBack, userProfile, uid, onProfileUpdated }) => {
               className="modal-input addr-search-input"
               placeholder="Search for area, street name..."
               defaultValue={formGoogleAddress}
-              onChange={(e) => setFormGoogleAddress(e.target.value)}
             />
           </div>
-          {formGoogleAddress && (
-            <p className="addr-selected-location">
-              <MapPin size={14} color="var(--accent-primary)" />
-              <span>{formGoogleAddress}</span>
-            </p>
-          )}
         </div>
 
-        {/* Specifics */}
         <div className="addr-form-section">
           <label className="modal-label">Address Details</label>
-
-          <div className="modal-field">
-            <input
-              type="text"
-              className="modal-input"
-              placeholder="Flat / House No. *"
-              value={formFlatNo}
-              onChange={e => setFormFlatNo(e.target.value)}
-            />
-          </div>
-
+          <input
+            type="text"
+            className="modal-input"
+            placeholder="Flat / House No. *"
+            value={formFlatNo}
+            onChange={e => setFormFlatNo(e.target.value)}
+          />
           <div className="addr-row-2col">
-            <div className="modal-field" style={{ flex: 1 }}>
-              <input
-                type="text"
-                className="modal-input"
-                placeholder="Tower / Wing"
-                value={formTower}
-                onChange={e => setFormTower(e.target.value)}
-              />
-            </div>
-            <div className="modal-field" style={{ flex: 1 }}>
-              <input
-                type="text"
-                className="modal-input"
-                placeholder="Floor"
-                value={formFloor}
-                onChange={e => setFormFloor(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="modal-field">
             <input
               type="text"
               className="modal-input"
-              placeholder="Landmark (optional)"
-              value={formLandmark}
-              onChange={e => setFormLandmark(e.target.value)}
+              placeholder="Tower / Wing"
+              value={formTower}
+              onChange={e => setFormTower(e.target.value)}
+            />
+            <input
+              type="text"
+              className="modal-input"
+              placeholder="Floor"
+              value={formFloor}
+              onChange={e => setFormFloor(e.target.value)}
             />
           </div>
+          <input
+            type="text"
+            className="modal-input"
+            placeholder="Landmark (optional)"
+            value={formLandmark}
+            onChange={e => setFormLandmark(e.target.value)}
+          />
         </div>
 
-        {/* Label Selector */}
         <div className="addr-form-section">
           <label className="modal-label">Save As</label>
           <div className="addr-label-chips">
-            {labelOptions.map(opt => {
-              const Icon = labelIcons[opt];
-              return (
-                <div
-                  key={opt}
-                  className={`addr-label-chip ${formLabel === opt ? 'active' : ''}`}
-                  onClick={() => setFormLabel(opt)}
-                >
-                  <Icon size={14} />
-                  <span>{opt}</span>
-                </div>
-              );
-            })}
+            {['Home', 'Work', 'Other'].map(opt => (
+              <div
+                key={opt}
+                className={`addr-label-chip ${formLabel === opt ? 'active' : ''}`}
+                onClick={() => setFormLabel(opt)}
+              >
+                {opt === 'Home' ? <HomeIcon size={14} /> : opt === 'Work' ? <Briefcase size={14} /> : <Tag size={14} />}
+                <span>{opt}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        <button className="add-new-address-btn" onClick={handleSave} disabled={saving} style={{ position: 'relative', bottom: 'auto', left: 'auto', right: 'auto' }}>
-          {saving ? 'Saving...' : (editIndex !== null ? 'Update Address' : 'Save Address')}
+        <button className="modal-save-btn" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : (editAddress ? 'Update Address' : 'Save Address')}
         </button>
       </div>
-    );
-  }
+    </div>
+  );
+};
 
-  // Address List
+// --- Profile Page Component ---
+const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSignOut, onDeleteAccount, uid, onProfileUpdated }) => {
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [editName, setEditName] = useState(userProfile?.name || '');
+  const [editPhone, setEditPhone] = useState(userProfile?.phone || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Address Modal state
+  const [isAddrModalOpen, setIsAddrModalOpen] = useState(false);
+  const [addressToEdit, setAddressToEdit] = useState(null);
+
+  useEffect(() => {
+    setEditName(userProfile?.name || '');
+    setEditPhone(userProfile?.phone || '');
+  }, [userProfile]);
+
+  const handleSaveContact = async () => {
+    if (!editName.trim()) { setError('Name is required'); return; }
+    const { validatePhone } = await import('./userProfileService.js');
+    const normalized = validatePhone(editPhone);
+    if (!normalized) { setError('Enter a valid 10-digit number'); return; }
+
+    setSaving(true);
+    await onEditProfile({ name: editName.trim(), phone: normalized });
+    setSaving(false);
+    setIsEditingContact(false);
+  };
+
+  const handleDeleteAddr = async (idx) => {
+    if (!window.confirm("Delete this address?")) return;
+    const svc = await import('./userProfileService.js');
+    await svc.deleteAddress(uid, idx);
+    await onProfileUpdated();
+  };
+
+  const handleSetDefaultAddr = async (idx) => {
+    const svc = await import('./userProfileService.js');
+    await svc.setDefaultAddress(uid, idx);
+    await onProfileUpdated();
+  };
+
+  const addresses = userProfile?.addresses || [];
+  const defaultIdx = userProfile?.defaultAddressIndex || 0;
+
   return (
-    <div className="address-page fade-in">
-      <div className="profile-header">
-        <div className="icon-btn-circle" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={onBack}>
+    <div className="profile-page-new fade-in">
+      <div className="profile-glass-header">
+        <div className="icon-btn-circle" onClick={onBack}>
           <ArrowLeft size={18} />
         </div>
-        <h2 className="checkout-title">Saved Addresses</h2>
-        <div style={{ width: '40px' }}></div>
+        <h2 className="profile-title-premium">My Profile</h2>
+        <div style={{ width: '36px' }}></div>
       </div>
 
-      {addresses.length === 0 ? (
-        <div className="addr-empty-state">
-          <MapPin size={40} color="var(--text-secondary)" />
-          <p>No saved addresses yet</p>
-          <span>Add an address to get started</span>
-        </div>
-      ) : (
-        <div className="saved-addresses-list">
-          {addresses.map((addr, idx) => {
-            const Icon = labelIcons[addr.label] || MapPin;
-            return (
-              <div key={idx} className="address-card">
-                <div className="address-icon-bg">
-                  <Icon size={20} />
-                </div>
-                <div className="address-info">
-                  <div className="address-name-row">
-                    <span className="address-name">{addr.label}</span>
-                    {idx === defaultIdx && <span className="default-badge">DEFAULT</span>}
-                  </div>
-                  <p className="address-detail-text">
-                    {addr.flatNo && `${addr.flatNo}, `}
-                    {addr.tower && `${addr.tower}, `}
-                    {addr.floor && `Floor ${addr.floor}, `}
-                    {addr.googleAddress}
-                    {addr.landmark && ` (near ${addr.landmark})`}
-                  </p>
-                  {idx !== defaultIdx && (
-                    <button className="addr-set-default-btn" onClick={() => handleSetDefault(idx)}>
-                      Set as default
-                    </button>
-                  )}
-                </div>
-                <div className="address-actions">
-                  <div className="address-action-btn" onClick={() => handleOpenEdit(idx)}>
-                    <Edit size={14} />
-                  </div>
-                  <div
-                    className="address-action-btn"
-                    onClick={() => handleDelete(idx)}
-                    style={deleting === idx ? { opacity: 0.4 } : {}}
-                  >
-                    <Trash2 size={14} />
-                  </div>
-                </div>
+      <div className="profile-scroll-content">
+        {/* Identity & Contact Section */}
+        <div className="profile-section-premium">
+          <div className="profile-identity-row">
+            <div className="premium-avatar">
+              <User size={32} color="var(--accent-primary)" />
+            </div>
+            {!isEditingContact ? (
+              <div className="premium-user-info">
+                <h3 className="premium-user-name">{userProfile?.name || 'Guest'}</h3>
+                <p className="premium-user-phone">{userProfile?.phone || 'No phone set'}</p>
               </div>
-            );
-          })}
+            ) : (
+              <div className="premium-edit-inline">
+                <input
+                  className="premium-inline-input"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="Your Name"
+                />
+                <input
+                  className="premium-inline-input"
+                  value={editPhone}
+                  onChange={e => setEditPhone(e.target.value)}
+                  placeholder="Phone Number"
+                />
+              </div>
+            )}
+            <button className="premium-edit-trigger" onClick={() => isEditingContact ? handleSaveContact() : setIsEditingContact(true)}>
+              {isEditingContact ? (saving ? '...' : <Check size={18} />) : <Edit size={18} />}
+            </button>
+          </div>
         </div>
-      )}
 
-      {!atLimit ? (
-        <button className="add-new-address-btn" onClick={handleOpenNew}>
-          <Plus size={20} />
-          Add New Address
-        </button>
-      ) : (
-        <div className="addr-limit-note">Maximum 4 addresses saved</div>
-      )}
+        {/* Addresses Section */}
+        <div className="profile-section-premium">
+          <div className="section-header-premium">
+            <h3 className="section-title-premium" style={{ color: 'white', opacity: 0.9 }}>Saved Addresses</h3>
+          </div>
+
+          <div className="premium-address-list">
+            {addresses.length === 0 ? (
+              <div className="premium-empty-state">
+                <MapPin size={24} opacity={0.3} />
+                <p>No addresses saved yet</p>
+              </div>
+            ) : (
+              addresses.map((addr, idx) => (
+                <div key={idx} className={`premium-address-card-v2 ${idx === defaultIdx ? 'v2-default' : ''}`}>
+                  <div className="v2-card-icon-bg">
+                    {addr.label === 'Home' ? <HomeIcon size={20} /> : addr.label === 'Work' ? <Briefcase size={20} /> : <Tag size={20} />}
+                  </div>
+                  <div className="v2-card-content">
+                    <div className="v2-card-header">
+                      <span className="v2-card-label">{addr.label}</span>
+                      {idx === defaultIdx && <span className="v2-default-badge">DEFAULT</span>}
+                      <div className="v2-card-actions">
+                        <button className="v2-action-btn" onClick={() => { setAddressToEdit({ ...addr, id: idx }); setIsAddrModalOpen(true); }}><Edit size={16} /></button>
+                        <button className="v2-action-btn" onClick={() => handleDeleteAddr(idx)}><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                    <p className="v2-card-address">
+                      {addr.flatNo && `${addr.flatNo}, `}
+                      {addr.tower && `${addr.tower}, `}
+                      {addr.floor && `Floor ${addr.floor}, `}
+                      {addr.googleAddress}
+                    </p>
+                    {idx !== defaultIdx && (
+                      <button className="v2-set-default-link" onClick={() => handleSetDefaultAddr(idx)}>Set as default</button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <button className="v2-add-new-btn-large" onClick={() => { setAddressToEdit(null); setIsAddrModalOpen(true); }}>
+            <Plus size={20} /> Add New Address
+          </button>
+        </div>
+
+        {/* Quick Links Section */}
+        <div className="profile-section-premium">
+          <div className="premium-menu-item" onClick={() => onMenuItemClick('HISTORY')}>
+            <div className="menu-icon-premium"><History size={20} /></div>
+            <span>Order History</span>
+            <ChevronRight size={18} className="menu-arrow" />
+          </div>
+        </div>
+
+        {/* Danger Zone */}
+        <div className="profile-section-premium danger-zone-premium">
+          <button className="danger-btn-premium" onClick={onSignOut}>
+            <LogOut size={18} /> Sign Out
+          </button>
+          <button className="danger-btn-premium text-red" onClick={onDeleteAccount}>
+            <Trash2 size={18} /> Delete Account
+          </button>
+        </div>
+      </div>
+
+      <AddressFormModal
+        isOpen={isAddrModalOpen}
+        onClose={() => setIsAddrModalOpen(false)}
+        userProfile={userProfile}
+        uid={uid}
+        onProfileUpdated={onProfileUpdated}
+        editAddress={addressToEdit}
+      />
     </div>
   );
 };
@@ -1178,8 +1114,8 @@ const AddressPicker = ({ addresses, defaultIdx, onSelect, onClose }) => {
 
 // --- Main App Component ---
 import { db, auth } from './firebase';
-import { collection, onSnapshot, query, orderBy, getDoc, doc } from 'firebase/firestore';
-import { signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, onSnapshot, query, orderBy, getDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { signInAnonymously, onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
 import { getProfile, createProfile, updateProfile, setDefaultAddress } from './userProfileService.js';
 import AuthPage from './AuthPage';
 
@@ -1216,6 +1152,7 @@ function App() {
   const [authError, setAuthError] = useState(null);
   const [dbError, setDbError] = useState(null);
   const [customerLocation, setCustomerLocation] = useState(null);
+  const [placedOrderId, setPlacedOrderId] = useState(null);
 
   // User profile state
   const [authUser, setAuthUser] = useState(null);
@@ -1223,6 +1160,7 @@ function App() {
   const [showProfileSetup, setShowProfileSetup] = useState(false);
   const [showAddressPicker, setShowAddressPicker] = useState(false);
   const [authRedirect, setAuthRedirect] = useState(null);
+  const [addrPageForcedNew, setAddrPageForcedNew] = useState(false);
 
   // Google Maps script loading
   const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -1357,13 +1295,13 @@ function App() {
     }
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (authUser?.isAnonymous) {
       setAuthRedirect('CHECKOUT');
       setCurrentPage('AUTH');
       return;
     }
-    if (!userProfile) {
+    if (!userProfile || !userProfile.name || !userProfile.phone) {
       setShowProfileSetup(true);
       return;
     }
@@ -1371,9 +1309,37 @@ function App() {
       setCurrentPage('PROFILE_ADDRESS');
       return;
     }
-    setCurrentPage('TRACKING');
-    setCart([]);
-    window.scrollTo(0, 0);
+
+    try {
+      const defaultIdx = userProfile.defaultAddressIndex || 0;
+      const deliveryAddress = userProfile.addresses[defaultIdx];
+
+      const newOrder = {
+        customerId: authUser.uid,
+        restaurantId: selectedRestaurant.id,
+        restaurantName: selectedRestaurant.name,
+        customerInfo: {
+          name: userProfile.name || '',
+          phone: userProfile.phone || ''
+        },
+        deliveryAddress,
+        items: cart,
+        totalAmount: cart.reduce((total, item) => total + item.price, 0),
+        status: 'placed',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      const docRef = await addDoc(collection(db, 'orders'), newOrder);
+      setPlacedOrderId(docRef.id);
+
+      setCurrentPage('TRACKING');
+      setCart([]);
+      window.scrollTo(0, 0);
+    } catch (err) {
+      console.error('Error placing order:', err);
+      alert('Failed to place order: ' + (err.message || 'Unknown error'));
+    }
   };
 
   const handleTabClick = (tabId) => {
@@ -1387,8 +1353,9 @@ function App() {
     window.scrollTo(0, 0);
   };
 
-  const handleProfileMenuClick = (menuId) => {
+  const handleProfileMenuClick = (menuId, data) => {
     if (menuId === 'ADDRESS') {
+      setAddrPageForcedNew(!!data?.isNew);
       setCurrentPage('PROFILE_ADDRESS');
     } else if (menuId === 'HISTORY') {
       setCurrentPage('PROFILE_ORDERS');
@@ -1401,7 +1368,11 @@ function App() {
   // Profile handlers
   const handleProfileSetupSave = async ({ name, phone }) => {
     if (!authUser) return;
-    await createProfile(authUser.uid, { name, phone });
+    if (userProfile) {
+      await updateProfile(authUser.uid, { name, phone });
+    } else {
+      await createProfile(authUser.uid, { name, phone });
+    }
     await fetchUserProfile(authUser.uid);
     setShowProfileSetup(false);
   };
@@ -1454,6 +1425,31 @@ function App() {
       setCurrentPage('HOME');
     } catch (err) {
       console.error('Error signing out:', err);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
+      return;
+    }
+    try {
+      if (authUser) {
+        await deleteUser(authUser);
+      }
+      setAuthUser(null);
+      setUserProfile(null);
+      setCart([]);
+      setCurrentPage('HOME');
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      if (err.code === 'auth/requires-recent-login') {
+        alert("Please sign in again to delete your account.");
+        await signOut(auth);
+        setAuthUser(null);
+        setCurrentPage('AUTH');
+      } else {
+        alert("Failed to delete account. Please try again later.");
+      }
     }
   };
 
@@ -1537,23 +1533,14 @@ function App() {
               userProfile={userProfile}
               onEditProfile={handleEditProfile}
               onSignOut={handleSignOut}
-            />
-            <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
-          </div>
-        );
-
-      case 'PROFILE_ADDRESS':
-        return (
-          <div className="app-container" style={{ padding: 0 }}>
-            <AddressPage
-              onBack={() => setCurrentPage('PROFILE')}
-              userProfile={userProfile}
+              onDeleteAccount={handleDeleteAccount}
               uid={authUser?.uid}
               onProfileUpdated={handleProfileUpdated}
             />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>
         );
+
 
       case 'PROFILE_ORDERS':
         return (
@@ -1624,6 +1611,7 @@ function App() {
         return (
           <div className="app-container" style={{ padding: 0 }}>
             <TrackingPage
+              orderId={placedOrderId}
               restaurantName={selectedRestaurant?.name || "The Pizza Project"}
               onBack={() => setCurrentPage('HOME')}
             />

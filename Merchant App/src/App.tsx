@@ -19,8 +19,9 @@ import {
 import type { User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { scanMenuFromImage } from './aiService';
-import { Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2, ClipboardList, Store } from 'lucide-react';
 import './App.css';
+import OrdersView from './OrdersView';
 
 interface MenuItem {
   id: string;
@@ -49,6 +50,7 @@ function App() {
   const [uploadingDishImage, setUploadingDishImage] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
   const [dishImageSuccess, setDishImageSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'ORDERS'>('DASHBOARD');
 
   // New Scan States
   const [scanning, setScanning] = useState(false);
@@ -583,410 +585,428 @@ function App() {
             <button className="secondary-btn logout-btn" onClick={handleLogout}>Log Out</button>
           </div>
         </div>
+        <div className="merchant-tabs" style={{ display: 'flex', gap: '20px', padding: '0 20px', marginTop: '10px', borderTop: '1px solid var(--border)', paddingTop: '15px', justifyContent: 'center' }}>
+          <button
+            onClick={() => setActiveTab('DASHBOARD')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', border: 'none', color: activeTab === 'DASHBOARD' ? 'var(--text)' : 'var(--text-light)', cursor: 'pointer', padding: '5px 0', fontSize: '15px', fontWeight: activeTab === 'DASHBOARD' ? 'bold' : 'normal', borderBottom: activeTab === 'DASHBOARD' ? '2px solid var(--primary)' : '2px solid transparent' }}
+          >
+            <Store size={18} /> Menu & Profile
+          </button>
+          <button
+            onClick={() => setActiveTab('ORDERS')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', border: 'none', color: activeTab === 'ORDERS' ? 'var(--text)' : 'var(--text-light)', cursor: 'pointer', padding: '5px 0', fontSize: '15px', fontWeight: activeTab === 'ORDERS' ? 'bold' : 'normal', borderBottom: activeTab === 'ORDERS' ? '2px solid var(--primary)' : '2px solid transparent' }}
+          >
+            <ClipboardList size={18} /> Live Orders
+          </button>
+        </div>
       </header>
 
-      <div className="merchant-layout">
-        <aside className="merchant-sidebar">
-          <section className="profile-section">
-            <h2>Restaurant Profile</h2>
-            <form onSubmit={handleUpdateProfile} className="profile-form">
-              <div className="input-group">
-                <label>Restaurant Name</label>
-                <input
-                  type="text"
-                  value={restaurantProfile.name}
-                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
-                  placeholder="e.g. Amara Curry House"
-                />
-              </div>
-              <div className="input-group">
-                <label>Cuisine Type</label>
-                <input
-                  type="text"
-                  value={restaurantProfile.cuisine}
-                  onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
-                  placeholder="e.g. Indian, Chinese"
-                />
-              </div>
-              <div className="input-group">
-                <label>Header Image</label>
-                <div className="image-options">
+      {activeTab === 'ORDERS' ? (
+        <OrdersView restaurantId={restaurantId} />
+      ) : (
+        <div className="merchant-layout">
+          <aside className="merchant-sidebar">
+            <section className="profile-section">
+              <h2>Restaurant Profile</h2>
+              <form onSubmit={handleUpdateProfile} className="profile-form">
+                <div className="input-group">
+                  <label>Restaurant Name</label>
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    id="header-image-upload"
-                    className="file-input-hidden"
+                    type="text"
+                    value={restaurantProfile.name}
+                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
+                    placeholder="e.g. Amara Curry House"
                   />
-                  <label
-                    htmlFor="header-image-upload"
-                    className="upload-label"
-                    style={{
-                      borderColor: uploadSuccess ? '#1ea97c' : '',
-                      color: uploadSuccess ? '#1ea97c' : '',
-                      background: uploadSuccess ? '#e1f9eb' : ''
-                    }}
-                  >
-                    <div className="upload-label-content">
-                      <ImageIcon size={18} />
-                      {uploadingImage ? 'Uploading...' : uploadSuccess ? 'Uploaded!' : 'Gallery'}
-                    </div>
-                  </label>
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleImageUpload}
-                    id="header-image-camera"
-                    className="file-input-hidden"
-                  />
-                  <label
-                    htmlFor="header-image-camera"
-                    className="upload-label camera-label"
-                    style={{
-                      borderColor: uploadSuccess ? '#1ea97c' : '',
-                      color: uploadSuccess ? '#1ea97c' : '',
-                      background: uploadSuccess ? '#e1f9eb' : ''
-                    }}
-                  >
-                    <div className="upload-label-content">
-                      <Camera size={18} />
-                      {uploadingImage ? 'Uploading...' : uploadSuccess ? 'Done!' : 'Camera'}
-                    </div>
-                  </label>
-
                 </div>
-
-                {/* Live Customer Preview */}
-                {restaurantProfile.image && (
-                  <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Customer App Preview
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => { setRestaurantProfile({ ...restaurantProfile, image: '' }); setUploadSuccess(false); }}
-                        className="delete-image-btn"
-                        title="Remove Header Image"
-                      >
-                        <Trash2 size={14} /> Remove
-                      </button>
-                    </div>
-                    <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
-                      <img src={restaurantProfile.image} alt="Restaurant Header" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }}></div>
-
-                      {/* Customer App layout mock */}
-                      <div style={{ position: 'absolute', top: '10px', left: '10px', width: '30px', height: '30px', background: 'rgba(255,255,255,0.9)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>←</div>
-                      <div style={{ position: 'absolute', bottom: '15px', left: '15px', color: 'white', display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
-                        <div style={{ width: '50px', height: '50px', background: 'white', borderRadius: '12px', padding: '2px', overflow: 'hidden' }}>
-                          <img src={restaurantProfile.image} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px' }} />
-                        </div>
-                        <div>
-                          <h3 style={{ margin: 0, fontSize: '1.2rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)', fontFamily: 'system-ui' }}>{restaurantProfile.name || 'Your Kitchen'}</h3>
-                          <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.9 }}>{restaurantProfile.cuisine || 'Cuisine'}</p>
-                        </div>
+                <div className="input-group">
+                  <label>Cuisine Type</label>
+                  <input
+                    type="text"
+                    value={restaurantProfile.cuisine}
+                    onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
+                    placeholder="e.g. Indian, Chinese"
+                  />
+                </div>
+                <div className="input-group">
+                  <label>Header Image</label>
+                  <div className="image-options">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      id="header-image-upload"
+                      className="file-input-hidden"
+                    />
+                    <label
+                      htmlFor="header-image-upload"
+                      className="upload-label"
+                      style={{
+                        borderColor: uploadSuccess ? '#1ea97c' : '',
+                        color: uploadSuccess ? '#1ea97c' : '',
+                        background: uploadSuccess ? '#e1f9eb' : ''
+                      }}
+                    >
+                      <div className="upload-label-content">
+                        <ImageIcon size={18} />
+                        {uploadingImage ? 'Uploading...' : uploadSuccess ? 'Uploaded!' : 'Gallery'}
                       </div>
-                    </div>
+                    </label>
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleImageUpload}
+                      id="header-image-camera"
+                      className="file-input-hidden"
+                    />
+                    <label
+                      htmlFor="header-image-camera"
+                      className="upload-label camera-label"
+                      style={{
+                        borderColor: uploadSuccess ? '#1ea97c' : '',
+                        color: uploadSuccess ? '#1ea97c' : '',
+                        background: uploadSuccess ? '#e1f9eb' : ''
+                      }}
+                    >
+                      <div className="upload-label-content">
+                        <Camera size={18} />
+                        {uploadingImage ? 'Uploading...' : uploadSuccess ? 'Done!' : 'Camera'}
+                      </div>
+                    </label>
+
                   </div>
-                )}
-              </div>
-              <div className="input-group">
-                <div className="location-container-v2">
-                  {(!restaurantProfile.latitude || isEditingLocation) ? (
-                    <div className="location-editing">
-                      <div className="location-input-wrapper-v2">
-                        <div className="input-with-pin">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff4d4d"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" /></svg>
-                          <input
-                            ref={locationInputCallbackRef}
-                            type="text"
-                            defaultValue={restaurantProfile.address}
-                            onChange={(e) => setRestaurantProfile({ ...restaurantProfile, address: e.target.value })}
-                            placeholder="Enter restaurant address..."
-                            className="location-search-input"
-                          />
-                        </div>
+
+                  {/* Live Customer Preview */}
+                  {restaurantProfile.image && (
+                    <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Customer App Preview
+                        </p>
                         <button
                           type="button"
-                          className="detect-location-btn"
-                          onClick={handleUseMyLocation}
-                          disabled={locatingUser}
+                          onClick={() => { setRestaurantProfile({ ...restaurantProfile, image: '' }); setUploadSuccess(false); }}
+                          className="delete-image-btn"
+                          title="Remove Header Image"
                         >
-                          {locatingUser ? <span className="mini-spinner"></span> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>}
-                          <span>Current Location</span>
+                          <Trash2 size={14} /> Remove
                         </button>
                       </div>
-                      <p className="tiny-hint">Start typing or use "Current Location" for better accuracy.</p>
-                    </div>
-                  ) : (
-                    <div className="location-display-card">
-                      <div className="card-map-mock">
-                        <div className="pulse-pin"></div>
-                      </div>
-                      <div className="card-content">
-                        <div className="card-info">
-                          <div className="location-label">Verified Restaurant Location</div>
-                          <div className="location-address-main">{restaurantProfile.address || 'Address not set'}</div>
-                        </div>
-                        <div className="card-actions">
-                          <button type="button" className="text-btn change-loc-btn" onClick={() => setIsEditingLocation(true)}>Change</button>
-                          <a
-                            href={`https://www.google.com/maps?q=${restaurantProfile.latitude},${restaurantProfile.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-btn map-link-btn"
-                          >
-                            View on Grid
-                          </a>
+                      <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
+                        <img src={restaurantProfile.image} alt="Restaurant Header" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%)' }}></div>
+
+                        {/* Customer App layout mock */}
+                        <div style={{ position: 'absolute', top: '10px', left: '10px', width: '30px', height: '30px', background: 'rgba(255,255,255,0.9)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>←</div>
+                        <div style={{ position: 'absolute', bottom: '15px', left: '15px', color: 'white', display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
+                          <div style={{ width: '50px', height: '50px', background: 'white', borderRadius: '12px', padding: '2px', overflow: 'hidden' }}>
+                            <img src={restaurantProfile.image} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '10px' }} />
+                          </div>
+                          <div>
+                            <h3 style={{ margin: 0, fontSize: '1.2rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)', fontFamily: 'system-ui' }}>{restaurantProfile.name || 'Your Kitchen'}</h3>
+                            <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.9 }}>{restaurantProfile.cuisine || 'Cuisine'}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <button type="submit" className="secondary-btn" disabled={profileSyncing}>
-                {profileSyncing ? 'Saving...' : 'Update Settings'}
-              </button>
-            </form>
-          </section>
-
-          <section className="menu-form-section">
-            <div className="section-header-flex">
-              <h2 style={{ margin: 0 }}>{editingItemId ? 'Edit Dish' : 'Add New Dish'}</h2>
-              {!editingItemId && (
-                <div className="scan-button-wrapper">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleScanUpload}
-                    id="menu-scan-upload"
-                    className="file-input-hidden"
-                  />
-                  <label htmlFor="menu-scan-upload" className="scan-badge" style={{ background: '#f0f0ff', color: '#6366f1', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', border: '1px solid currentColor' }}>
-                    ✨ Scan Menu
-                  </label>
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleAddOrEdit} className="menu-form">
-              <div className="input-group">
-                <label>Dish Name</label>
-                <input
-                  type="text"
-                  value={newItem.name}
-                  required
-                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                  placeholder="e.g. Paneer Butter Masala"
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Dietary Preference (Mandatory)</label>
-                <div style={{ display: 'flex', gap: '20px', padding: '5px 0' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
-                    <input
-                      type="radio"
-                      name="isVeg"
-                      value="true"
-                      checked={newItem.isVeg === 'true'}
-                      onChange={(e) => setNewItem({ ...newItem, isVeg: e.target.value })}
-                      required
-                    />
-                    <span style={{ color: '#1ea97c' }}>●</span> Veg
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
-                    <input
-                      type="radio"
-                      name="isVeg"
-                      value="false"
-                      checked={newItem.isVeg === 'false'}
-                      onChange={(e) => setNewItem({ ...newItem, isVeg: e.target.value })}
-                      required
-                    />
-                    <span style={{ color: '#ff4d4d' }}>●</span> Non-Veg
-                  </label>
-                </div>
-              </div>
-
-              <div className="input-grid">
                 <div className="input-group">
-                  <label>Price (₹)</label>
-                  <input
-                    type="number"
-                    value={newItem.price}
-                    required
-                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                    placeholder="250"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Cuisine</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. North Indian"
-                    value={newItem.category}
-                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Description</label>
-                <textarea
-                  value={newItem.description}
-                  onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  placeholder="Tell customers about this dish..."
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Dish Image (Optional)</label>
-                <div className="image-options">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleDishImageUpload}
-                    id="dish-image-upload"
-                    className="file-input-hidden"
-                  />
-                  <label
-                    htmlFor="dish-image-upload"
-                    className="upload-label"
-                    style={{
-                      borderColor: dishImageSuccess ? '#1ea97c' : '',
-                      color: dishImageSuccess ? '#1ea97c' : '',
-                      background: dishImageSuccess ? '#e1f9eb' : ''
-                    }}
-                  >
-                    <div className="upload-label-content">
-                      <ImageIcon size={18} />
-                      {uploadingDishImage ? 'Uploading...' : dishImageSuccess ? 'Uploaded!' : 'Gallery'}
-                    </div>
-                  </label>
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handleDishImageUpload}
-                    id="dish-image-camera"
-                    className="file-input-hidden"
-                  />
-                  <label
-                    htmlFor="dish-image-camera"
-                    className="upload-label camera-label"
-                    style={{
-                      borderColor: dishImageSuccess ? '#1ea97c' : '',
-                      color: dishImageSuccess ? '#1ea97c' : '',
-                      background: dishImageSuccess ? '#e1f9eb' : ''
-                    }}
-                  >
-                    <div className="upload-label-content">
-                      <Camera size={18} />
-                      {uploadingDishImage ? 'Uploading...' : dishImageSuccess ? 'Done!' : 'Camera'}
-                    </div>
-                  </label>
-                </div>
-                {newItem.imageUrl && (
-                  <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Dish Image Preview
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => { setNewItem({ ...newItem, imageUrl: '' }); setDishImageSuccess(false); }}
-                        className="delete-image-btn"
-                        title="Remove Dish Image"
-                      >
-                        <Trash2 size={14} /> Remove
-                      </button>
-                    </div>
-                    <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
-                      <img src={newItem.imageUrl} alt="Dish preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="submit" className="primary-btn" disabled={syncing} style={{ flex: 1 }}>
-                  {syncing ? 'Saving...' : editingItemId ? 'Update Dish' : 'Add to Menu'}
-                </button>
-                {editingItemId && (
-                  <button type="button" className="secondary-btn" disabled={syncing} onClick={() => {
-                    setEditingItemId(null);
-                    setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
-                    setDishImageSuccess(false);
-                  }}>
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
-          </section>
-        </aside>
-
-        <main className="menu-preview-section">
-          <div className="preview-header">
-            <h2>Live Menu Preview</h2>
-            <div className={`status-pill ${restaurantProfile.isOpen ? 'open' : 'closed'}`}>
-              {restaurantProfile.isOpen ? '● OPEN' : '● CLOSED'}
-            </div>
-          </div>
-
-          <div className="preview-list">
-            {menuItems.length === 0 ? (
-              <p className="empty-msg">No items added yet. Your customers will see an empty menu.</p>
-            ) : (
-              menuItems.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(item => (
-                <div key={item.id} className={`preview-card ${item.isAvailable === false ? 'unavailable' : ''}`}>
-                  <div style={{ display: 'flex', gap: '15px', flexGrow: 1 }}>
-                    {item.imageUrl && (
-                      <div style={{ width: '80px', height: '80px', flexShrink: 0 }}>
-                        <img src={item.imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
+                  <div className="location-container-v2">
+                    {(!restaurantProfile.latitude || isEditingLocation) ? (
+                      <div className="location-editing">
+                        <div className="location-input-wrapper-v2">
+                          <div className="input-with-pin">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff4d4d"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" /></svg>
+                            <input
+                              ref={locationInputCallbackRef}
+                              type="text"
+                              defaultValue={restaurantProfile.address}
+                              onChange={(e) => setRestaurantProfile({ ...restaurantProfile, address: e.target.value })}
+                              placeholder="Enter restaurant address..."
+                              className="location-search-input"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="detect-location-btn"
+                            onClick={handleUseMyLocation}
+                            disabled={locatingUser}
+                          >
+                            {locatingUser ? <span className="mini-spinner"></span> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>}
+                            <span>Current Location</span>
+                          </button>
+                        </div>
+                        <p className="tiny-hint">Start typing or use "Current Location" for better accuracy.</p>
+                      </div>
+                    ) : (
+                      <div className="location-display-card">
+                        <div className="card-map-mock">
+                          <div className="pulse-pin"></div>
+                        </div>
+                        <div className="card-content">
+                          <div className="card-info">
+                            <div className="location-label">Verified Restaurant Location</div>
+                            <div className="location-address-main">{restaurantProfile.address || 'Address not set'}</div>
+                          </div>
+                          <div className="card-actions">
+                            <button type="button" className="text-btn change-loc-btn" onClick={() => setIsEditingLocation(true)}>Change</button>
+                            <a
+                              href={`https://www.google.com/maps?q=${restaurantProfile.latitude},${restaurantProfile.longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-btn map-link-btn"
+                            >
+                              View on Grid
+                            </a>
+                          </div>
+                        </div>
                       </div>
                     )}
-                    <div className="card-info">
-                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {item.isVeg !== undefined && (
-                          <span style={{ color: item.isVeg ? '#1ea97c' : '#ff4d4d', fontSize: '10px' }}>●</span>
-                        )}
-                        {item.name}
-                      </h3>
-                      {item.category && <p className="category-badge">{item.category}</p>}
-                      <p className="desc">{item.description}</p>
-                    </div>
-                  </div>
-                  <div className="card-price">
-                    ₹{item.price}
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
-                      <div
-                        className={`toggle-switch-sm ${item.isAvailable !== false ? 'on' : 'off'}`}
-                        onClick={() => handleToggleDishAvailable(item.id, item.isAvailable !== false)}
-                        title={item.isAvailable !== false ? 'Mark as unavailable' : 'Mark as available'}
-                      >
-                        <div className="toggle-knob-sm"></div>
-                      </div>
-                      <button className="icon-action-btn edit" title="Edit Item" onClick={() => handleEditClick(item)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                      </button>
-                      <button className="icon-action-btn delete" title="Delete Item" onClick={() => handleDelete(item.id)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                      </button>
-                    </div>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </main>
-      </div>
+
+                <button type="submit" className="secondary-btn" disabled={profileSyncing}>
+                  {profileSyncing ? 'Saving...' : 'Update Settings'}
+                </button>
+              </form>
+            </section>
+
+            <section className="menu-form-section">
+              <div className="section-header-flex">
+                <h2 style={{ margin: 0 }}>{editingItemId ? 'Edit Dish' : 'Add New Dish'}</h2>
+                {!editingItemId && (
+                  <div className="scan-button-wrapper">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleScanUpload}
+                      id="menu-scan-upload"
+                      className="file-input-hidden"
+                    />
+                    <label htmlFor="menu-scan-upload" className="scan-badge" style={{ background: '#f0f0ff', color: '#6366f1', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.8rem', border: '1px solid currentColor' }}>
+                      ✨ Scan Menu
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleAddOrEdit} className="menu-form">
+                <div className="input-group">
+                  <label>Dish Name</label>
+                  <input
+                    type="text"
+                    value={newItem.name}
+                    required
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    placeholder="e.g. Paneer Butter Masala"
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label>Dietary Preference (Mandatory)</label>
+                  <div style={{ display: 'flex', gap: '20px', padding: '5px 0' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
+                      <input
+                        type="radio"
+                        name="isVeg"
+                        value="true"
+                        checked={newItem.isVeg === 'true'}
+                        onChange={(e) => setNewItem({ ...newItem, isVeg: e.target.value })}
+                        required
+                      />
+                      <span style={{ color: '#1ea97c' }}>●</span> Veg
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 500 }}>
+                      <input
+                        type="radio"
+                        name="isVeg"
+                        value="false"
+                        checked={newItem.isVeg === 'false'}
+                        onChange={(e) => setNewItem({ ...newItem, isVeg: e.target.value })}
+                        required
+                      />
+                      <span style={{ color: '#ff4d4d' }}>●</span> Non-Veg
+                    </label>
+                  </div>
+                </div>
+
+                <div className="input-grid">
+                  <div className="input-group">
+                    <label>Price (₹)</label>
+                    <input
+                      type="number"
+                      value={newItem.price}
+                      required
+                      onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                      placeholder="250"
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>Cuisine</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. North Indian"
+                      value={newItem.category}
+                      onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label>Description</label>
+                  <textarea
+                    value={newItem.description}
+                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                    placeholder="Tell customers about this dish..."
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label>Dish Image (Optional)</label>
+                  <div className="image-options">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleDishImageUpload}
+                      id="dish-image-upload"
+                      className="file-input-hidden"
+                    />
+                    <label
+                      htmlFor="dish-image-upload"
+                      className="upload-label"
+                      style={{
+                        borderColor: dishImageSuccess ? '#1ea97c' : '',
+                        color: dishImageSuccess ? '#1ea97c' : '',
+                        background: dishImageSuccess ? '#e1f9eb' : ''
+                      }}
+                    >
+                      <div className="upload-label-content">
+                        <ImageIcon size={18} />
+                        {uploadingDishImage ? 'Uploading...' : dishImageSuccess ? 'Uploaded!' : 'Gallery'}
+                      </div>
+                    </label>
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleDishImageUpload}
+                      id="dish-image-camera"
+                      className="file-input-hidden"
+                    />
+                    <label
+                      htmlFor="dish-image-camera"
+                      className="upload-label camera-label"
+                      style={{
+                        borderColor: dishImageSuccess ? '#1ea97c' : '',
+                        color: dishImageSuccess ? '#1ea97c' : '',
+                        background: dishImageSuccess ? '#e1f9eb' : ''
+                      }}
+                    >
+                      <div className="upload-label-content">
+                        <Camera size={18} />
+                        {uploadingDishImage ? 'Uploading...' : dishImageSuccess ? 'Done!' : 'Camera'}
+                      </div>
+                    </label>
+                  </div>
+                  {newItem.imageUrl && (
+                    <div style={{ marginTop: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', margin: 0, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Dish Image Preview
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { setNewItem({ ...newItem, imageUrl: '' }); setDishImageSuccess(false); }}
+                          className="delete-image-btn"
+                          title="Remove Dish Image"
+                        >
+                          <Trash2 size={14} /> Remove
+                        </button>
+                      </div>
+                      <div style={{ position: 'relative', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
+                        <img src={newItem.imageUrl} alt="Dish preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="submit" className="primary-btn" disabled={syncing} style={{ flex: 1 }}>
+                    {syncing ? 'Saving...' : editingItemId ? 'Update Dish' : 'Add to Menu'}
+                  </button>
+                  {editingItemId && (
+                    <button type="button" className="secondary-btn" disabled={syncing} onClick={() => {
+                      setEditingItemId(null);
+                      setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
+                      setDishImageSuccess(false);
+                    }}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+            </section>
+          </aside>
+
+          <main className="menu-preview-section">
+            <div className="preview-header">
+              <h2>Live Menu Preview</h2>
+              <div className={`status-pill ${restaurantProfile.isOpen ? 'open' : 'closed'}`}>
+                {restaurantProfile.isOpen ? '● OPEN' : '● CLOSED'}
+              </div>
+            </div>
+
+            <div className="preview-list">
+              {menuItems.length === 0 ? (
+                <p className="empty-msg">No items added yet. Your customers will see an empty menu.</p>
+              ) : (
+                menuItems.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(item => (
+                  <div key={item.id} className={`preview-card ${item.isAvailable === false ? 'unavailable' : ''}`}>
+                    <div style={{ display: 'flex', gap: '15px', flexGrow: 1 }}>
+                      {item.imageUrl && (
+                        <div style={{ width: '80px', height: '80px', flexShrink: 0 }}>
+                          <img src={item.imageUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border)' }} />
+                        </div>
+                      )}
+                      <div className="card-info">
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {item.isVeg !== undefined && (
+                            <span style={{ color: item.isVeg ? '#1ea97c' : '#ff4d4d', fontSize: '10px' }}>●</span>
+                          )}
+                          {item.name}
+                        </h3>
+                        {item.category && <p className="category-badge">{item.category}</p>}
+                        <p className="desc">{item.description}</p>
+                      </div>
+                    </div>
+                    <div className="card-price">
+                      ₹{item.price}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+                        <div
+                          className={`toggle-switch-sm ${item.isAvailable !== false ? 'on' : 'off'}`}
+                          onClick={() => handleToggleDishAvailable(item.id, item.isAvailable !== false)}
+                          title={item.isAvailable !== false ? 'Mark as unavailable' : 'Mark as available'}
+                        >
+                          <div className="toggle-knob-sm"></div>
+                        </div>
+                        <button className="icon-action-btn edit" title="Edit Item" onClick={() => handleEditClick(item)}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        </button>
+                        <button className="icon-action-btn delete" title="Delete Item" onClick={() => handleDelete(item.id)}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </main>
+        </div>
+      )}
 
       {showScanner && (
         <div className="scanner-overlay">
