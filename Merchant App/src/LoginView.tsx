@@ -25,7 +25,7 @@ const LoginView = () => {
     if (!window.recaptchaVerifier) {
       window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
         size: 'invisible',
-        callback: (response: any) => {
+        callback: () => {
           console.log('reCAPTCHA solved');
         },
         'expired-callback': () => {
