@@ -10,11 +10,8 @@ import {
   getDoc
 } from 'firebase/firestore';
 import {
-  signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  GoogleAuthProvider,
-  signInWithPopup
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -22,6 +19,14 @@ import { scanMenuFromImage } from './aiService';
 import { Camera, Image as ImageIcon, Trash2, ClipboardList, Store } from 'lucide-react';
 import './App.css';
 import OrdersView from './OrdersView';
+import LoginView from './LoginView';
+
+declare global {
+  interface Window {
+    recaptchaVerifier: any;
+    confirmationResult: any;
+  }
+}
 
 interface MenuItem {
   id: string;
@@ -37,8 +42,6 @@ interface MenuItem {
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [restaurantId, setRestaurantId] = useState('');
   const [restaurantName, setRestaurantName] = useState('');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -329,24 +332,6 @@ function App() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error: any) {
-      alert(error.message);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error: any) {
-      alert(error.message);
-    }
-  };
-
   const handleLogout = () => signOut(auth);
 
   // ── Google Maps / Places ──
@@ -541,27 +526,7 @@ function App() {
   if (loading) return <div className="loading">Loading dashboard...</div>;
 
   if (!user) {
-    return (
-      <div className="login-container">
-        <div className="login-box">
-          <h1>Merchant Login</h1>
-          <form onSubmit={handleLogin} className="email-login">
-            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            <button type="submit" className="primary-btn">Login with Email</button>
-          </form>
-
-          <div className="login-divider">
-            <span>OR</span>
-          </div>
-
-          <button onClick={handleGoogleLogin} className="google-btn">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
-            Login with Google
-          </button>
-        </div>
-      </div>
-    );
+    return <LoginView />;
   }
 
   return (

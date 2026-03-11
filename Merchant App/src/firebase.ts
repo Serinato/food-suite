@@ -13,7 +13,7 @@ const firebaseConfig = {
     appId: "1:248938861326:web:b21e11dc9d2c3942bbfd5f",
     measurementId: "G-FB4L60MS2Z"
 };
-console.log("Firebase Config (Hardcoded):", { ...firebaseConfig, apiKey: "REDACTED" });
+console.log("Firebase Config (Restored):", { ...firebaseConfig, apiKey: "REDACTED" });
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
