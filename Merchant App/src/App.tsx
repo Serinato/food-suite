@@ -131,8 +131,8 @@ function App() {
         } as any);
         setRestaurantName(data.name || 'Your Restaurant');
       }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
+    } catch (_error) {
+      // Silently handle profile fetch errors
     } finally {
       setLoading(false);
     }
@@ -146,8 +146,7 @@ function App() {
       await setDoc(docRef, restaurantProfile, { merge: true });
       setRestaurantName(restaurantProfile.name);
       alert('Profile updated successfully!');
-    } catch (error) {
-      console.error("Error updating profile:", error);
+    } catch (_error) {
       alert('Failed to update profile');
     } finally {
       setProfileSyncing(false);
@@ -160,8 +159,7 @@ function App() {
     setRestaurantProfile(prev => ({ ...prev, isOpen: newIsOpen }));
     try {
       await setDoc(doc(db, 'restaurants', restaurantId), { isOpen: newIsOpen }, { merge: true });
-    } catch (err) {
-      console.error('Failed to toggle open status:', err);
+    } catch (_err) {
       setRestaurantProfile(prev => ({ ...prev, isOpen: !newIsOpen })); // rollback
     }
   };
@@ -173,8 +171,7 @@ function App() {
     setMenuItems(prev => prev.map(i => i.id === itemId ? { ...i, isAvailable: newAvail } : i));
     try {
       await setDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId), { isAvailable: newAvail }, { merge: true });
-    } catch (err) {
-      console.error('Failed to toggle dish availability:', err);
+    } catch (_err) {
       setMenuItems(prev => prev.map(i => i.id === itemId ? { ...i, isAvailable: !newAvail } : i)); // rollback
     }
   };
@@ -192,8 +189,7 @@ function App() {
       setRestaurantProfile(prev => ({ ...prev, image: downloadURL }));
       setUploadSuccess(true);
       setTimeout(() => setUploadSuccess(false), 3000);
-    } catch (error) {
-      console.error("Error uploading image: ", error);
+    } catch (_error) {
       alert("Failed to upload image. Ensure Firebase Storage rules allow uploads.");
     } finally {
       setUploadingImage(false);
@@ -252,9 +248,8 @@ function App() {
 
       setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
       setDishImageSuccess(false);
-    } catch (error) {
-      console.error("Error saving document: ", error);
-      alert("Failed to sync with cloud. Check console.");
+    } catch (_error) {
+      alert("Failed to sync with cloud.");
     } finally {
       setSyncing(false);
     }
@@ -327,8 +322,8 @@ function App() {
     if (!confirm('Are you sure?')) return;
     try {
       await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId));
-    } catch (error) {
-      console.error("Error deleting:", error);
+    } catch (_error) {
+      // Silently handle delete errors
     }
   };
 
@@ -512,8 +507,8 @@ function App() {
               address: result.results[0].formatted_address
             }));
           }
-        } catch (err) {
-          console.log("Silent healing failed (API might be loading or limited)");
+        } catch (_err) {
+          // Silent healing failed — API might be loading or limited
         }
       }
     };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import './App.css';
 
@@ -48,7 +49,9 @@ function formatDistance(km) {
 
 // --- Main App ---
 function App() {
-  const [currentPage, setCurrentPage] = useState(() => localStorage.getItem('food_suite_currentPage') || 'HOME');
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [selectedRestaurant, setSelectedRestaurant] = useState(() => {
     const saved = localStorage.getItem('food_suite_selectedRestaurant');
     return saved ? JSON.parse(saved) : null;
@@ -100,7 +103,6 @@ function App() {
   }, []);
 
   // Sync state to localStorage
-  useEffect(() => { localStorage.setItem('food_suite_currentPage', currentPage); }, [currentPage]);
   useEffect(() => {
     if (selectedRestaurant) {
       localStorage.setItem('food_suite_selectedRestaurant', JSON.stringify(selectedRestaurant));
@@ -110,11 +112,8 @@ function App() {
   }, [selectedRestaurant]);
   useEffect(() => { localStorage.setItem('food_suite_cart', JSON.stringify(cart)); }, [cart]);
   useEffect(() => {
-    if (placedOrderId) {
-      localStorage.setItem('food_suite_placedOrderId', placedOrderId);
-    } else {
-      localStorage.removeItem('food_suite_placedOrderId');
-    }
+    if (placedOrderId) localStorage.setItem('food_suite_placedOrderId', placedOrderId);
+    else localStorage.removeItem('food_suite_placedOrderId');
   }, [placedOrderId]);
 
   // Auth and Firestore listener
@@ -199,7 +198,7 @@ function App() {
       return;
     }
     setSelectedRestaurant({ ...restaurant, menu: [] });
-    setCurrentPage('DETAIL');
+    navigate('/restaurant');
     window.scrollTo(0, 0);
   };
 
@@ -215,9 +214,9 @@ function App() {
   };
 
   const handlePlaceOrder = async () => {
-    if (authUser?.isAnonymous) { setAuthRedirect('CHECKOUT'); setCurrentPage('AUTH'); return; }
+    if (authUser?.isAnonymous) { setAuthRedirect('/checkout'); navigate('/auth'); return; }
     if (!userProfile || !userProfile.name || !userProfile.phone) { setShowProfileSetup(true); return; }
-    if (!userProfile.addresses || userProfile.addresses.length === 0) { setCurrentPage('PROFILE_ADDRESS'); return; }
+    if (!userProfile.addresses || userProfile.addresses.length === 0) { navigate('/profile'); return; }
 
     try {
       const defaultIdx = userProfile.defaultAddressIndex || 0;
@@ -236,7 +235,7 @@ function App() {
       };
       const docRef = await addDoc(collection(db, 'orders'), newOrder);
       setPlacedOrderId(docRef.id);
-      setCurrentPage('TRACKING');
+      navigate('/tracking');
       setCart([]);
       window.scrollTo(0, 0);
     } catch (err) {
@@ -246,18 +245,19 @@ function App() {
   };
 
   const handleTabClick = (tabId) => {
+    const routes = { HOME: '/', ORDERS: '/orders', SEARCH: '/search', PROFILE: '/profile' };
     if ((tabId === 'PROFILE' || tabId === 'ORDERS') && authUser?.isAnonymous) {
-      setAuthRedirect(tabId);
-      setCurrentPage('AUTH');
+      setAuthRedirect(routes[tabId]);
+      navigate('/auth');
       window.scrollTo(0, 0);
       return;
     }
-    setCurrentPage(tabId);
+    navigate(routes[tabId] || '/');
     window.scrollTo(0, 0);
   };
 
   const handleProfileMenuClick = (menuId) => {
-    if (menuId === 'HISTORY') setCurrentPage('PROFILE_ORDERS');
+    if (menuId === 'HISTORY') navigate('/orders');
     window.scrollTo(0, 0);
   };
 
@@ -293,14 +293,14 @@ function App() {
   };
 
   const handleGoToCheckout = () => {
-    if (authUser?.isAnonymous) { setAuthRedirect('CHECKOUT'); setCurrentPage('AUTH'); return; }
-    setCurrentPage('CHECKOUT');
+    if (authUser?.isAnonymous) { setAuthRedirect('/checkout'); navigate('/auth'); return; }
+    navigate('/checkout');
   };
 
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      setAuthUser(null); setUserProfile(null); setCart([]); setCurrentPage('HOME');
+      setAuthUser(null); setUserProfile(null); setCart([]); navigate('/');
     } catch (err) { console.error('Error signing out:', err); }
   };
 
@@ -308,21 +308,21 @@ function App() {
     if (!window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) return;
     try {
       if (authUser) await deleteUser(authUser);
-      setAuthUser(null); setUserProfile(null); setCart([]); setCurrentPage('HOME');
+      setAuthUser(null); setUserProfile(null); setCart([]); navigate('/');
     } catch (err) {
       console.error('Error deleting account:', err);
       if (err.code === 'auth/requires-recent-login') {
         alert("Please sign in again to delete your account.");
         await signOut(auth);
         setAuthUser(null);
-        setCurrentPage('AUTH');
+        navigate('/auth');
       } else {
         alert("Failed to delete account. Please try again later.");
       }
     }
   };
 
-  // --- Render ---
+  // --- Derive Display Data ---
   let displayRestaurants = restaurants;
   if (activeFilter === 'Pure Veg') {
     displayRestaurants = displayRestaurants.filter(r => pureVegStatus[r.id] === true);
@@ -340,53 +340,80 @@ function App() {
     };
   });
 
-  const renderContent = () => {
-    switch (currentPage) {
-      case 'HOME':
-        return (
-          <div className="app-container">
-            <div className="home-header-fixed">
-              <Header userProfile={userProfile} onClickLocation={handleChangeAddress} />
-              <SearchBar />
-              <FilterPills activeFilter={activeFilter} onFilterChange={setActiveFilter} />
-              <div className="section-header">
-                <h2 className="section-title">Local Restaurants Managed by You</h2>
-              </div>
-            </div>
-            <div className="restaurants-list">
-              {liveRestaurants.length === 0 ? (
-                <div className="loading-state"><p>Connecting to Food Suite Cloud...</p></div>
-              ) : (
-                liveRestaurants.map(restaurant => (
-                  <RestaurantCard key={restaurant.id} restaurant={restaurant} onClick={() => handleRestaurantClick(restaurant)} />
-                ))
-              )}
-            </div>
-            <BottomNav activeTab="HOME" onTabClick={handleTabClick} />
-          </div>
-        );
+  // Determine active tab from current route
+  const pathToTab = { '/': 'HOME', '/orders': 'ORDERS', '/search': 'SEARCH', '/profile': 'PROFILE' };
+  const currentTab = pathToTab[location.pathname] || 'HOME';
 
-      case 'ORDERS':
-        return (
+  // --- Page Components ---
+  const HomePage = () => (
+    <div className="app-container">
+      <div className="home-header-fixed">
+        <Header userProfile={userProfile} onClickLocation={handleChangeAddress} />
+        <SearchBar />
+        <FilterPills activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+        <div className="section-header">
+          <h2 className="section-title">Local Restaurants Managed by You</h2>
+        </div>
+      </div>
+      <div className="restaurants-list">
+        {liveRestaurants.length === 0 ? (
+          <div className="loading-state"><p>Connecting to Food Suite Cloud...</p></div>
+        ) : (
+          liveRestaurants.map(restaurant => (
+            <RestaurantCard key={restaurant.id} restaurant={restaurant} onClick={() => handleRestaurantClick(restaurant)} />
+          ))
+        )}
+      </div>
+      <BottomNav activeTab="HOME" onTabClick={handleTabClick} />
+    </div>
+  );
+
+  const DetailPage = () => selectedRestaurant ? (
+    <div className="app-container" style={{ padding: 0 }}>
+      <RestaurantDetail
+        restaurant={selectedRestaurant}
+        items={cloudMenu}
+        onBack={() => navigate('/')}
+        onAddToCart={handleAddToCart}
+        onRemoveFromCart={handleRemoveFromCart}
+        cart={cart}
+        onViewCart={handleGoToCheckout}
+      />
+      {cart.length > 0 && (
+        <div className="cart-floating-bar" onClick={handleGoToCheckout}>
+          <div className="cart-left">
+            <span className="cart-items-count">{cart.length} Items</span>
+            <span>View Cart</span>
+          </div>
+          <div className="cart-right">
+            <span>₹{cart.reduce((total, item) => total + item.price, 0).toFixed(2)}</span>
+            <ChevronRight size={18} />
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  return (
+    <div className="full-app">
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/orders" element={
           <div className="app-container" style={{ padding: 0 }}>
-            <OrderHistoryPage onBack={() => setCurrentPage('HOME')} userId={authUser?.uid} />
+            <OrderHistoryPage onBack={() => navigate('/')} userId={authUser?.uid} />
             <BottomNav activeTab="ORDERS" onTabClick={handleTabClick} />
           </div>
-        );
-
-      case 'SEARCH':
-        return (
+        } />
+        <Route path="/search" element={
           <div className="app-container">
             <div style={{ height: '300px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--text-secondary)' }}>Coming Soon</div>
-            <BottomNav activeTab={currentPage} onTabClick={handleTabClick} />
+            <BottomNav activeTab="SEARCH" onTabClick={handleTabClick} />
           </div>
-        );
-
-      case 'PROFILE':
-        return (
+        } />
+        <Route path="/profile" element={
           <div className="app-container" style={{ padding: 0 }}>
             <ProfilePage
-              onBack={() => setCurrentPage('HOME')}
+              onBack={() => navigate('/')}
               onMenuItemClick={handleProfileMenuClick}
               userProfile={userProfile}
               onEditProfile={handleEditProfile}
@@ -398,78 +425,34 @@ function App() {
             />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>
-        );
-
-      case 'PROFILE_ORDERS':
-        return (
-          <div className="app-container" style={{ padding: 0 }}>
-            <OrderHistoryPage onBack={() => setCurrentPage('PROFILE')} userId={authUser?.uid} />
-            <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
-          </div>
-        );
-
-      case 'DETAIL':
-        return selectedRestaurant ? (
-          <div className="app-container" style={{ padding: 0 }}>
-            <RestaurantDetail
-              restaurant={selectedRestaurant}
-              items={cloudMenu}
-              onBack={() => setCurrentPage('HOME')}
-              onAddToCart={handleAddToCart}
-              onRemoveFromCart={handleRemoveFromCart}
-              cart={cart}
-              onViewCart={handleGoToCheckout}
-            />
-            {cart.length > 0 && (
-              <div className="cart-floating-bar" onClick={handleGoToCheckout}>
-                <div className="cart-left">
-                  <span className="cart-items-count">{cart.length} Items</span>
-                  <span>View Cart</span>
-                </div>
-                <div className="cart-right">
-                  <span>₹{cart.reduce((total, item) => total + item.price, 0).toFixed(2)}</span>
-                  <ChevronRight size={18} />
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null;
-
-      case 'AUTH':
-        return (
+        } />
+        <Route path="/restaurant" element={<DetailPage />} />
+        <Route path="/auth" element={
           <div className="app-container" style={{ padding: 0 }}>
             <AuthPage
-              onBack={() => setCurrentPage('HOME')}
+              onBack={() => navigate('/')}
               onAuthSuccess={() => {
-                if (authRedirect) { setCurrentPage(authRedirect); setAuthRedirect(null); }
-                else { setCurrentPage('HOME'); }
+                if (authRedirect) { navigate(authRedirect); setAuthRedirect(null); }
+                else { navigate('/'); }
               }}
             />
           </div>
-        );
-
-      case 'CHECKOUT':
-        return (
+        } />
+        <Route path="/checkout" element={
           <div className="app-container" style={{ padding: 0 }}>
-            <CheckoutPage cart={cart} onBack={() => setCurrentPage('DETAIL')} onPlaceOrder={handlePlaceOrder} userProfile={userProfile} onChangeAddress={handleChangeAddress} />
+            <CheckoutPage cart={cart} onBack={() => navigate('/restaurant')} onPlaceOrder={handlePlaceOrder} userProfile={userProfile} onChangeAddress={handleChangeAddress} />
           </div>
-        );
-
-      case 'TRACKING':
-        return (
+        } />
+        <Route path="/tracking" element={
           <div className="app-container" style={{ padding: 0 }}>
-            <TrackingPage orderId={placedOrderId} restaurantName={selectedRestaurant?.name || "Restaurant"} onBack={() => setCurrentPage('HOME')} />
+            <TrackingPage orderId={placedOrderId} restaurantName={selectedRestaurant?.name || "Restaurant"} onBack={() => navigate('/')} />
           </div>
-        );
+        } />
+        {/* Fallback: redirect unknown routes to home */}
+        <Route path="*" element={<HomePage />} />
+      </Routes>
 
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="full-app">
-      {renderContent()}
+      {/* Global Modals */}
       {showProfileSetup && <ProfileSetupModal onSave={handleProfileSetupSave} onClose={() => setShowProfileSetup(false)} />}
       <AddressFormModal isOpen={isAddrModalOpen} onClose={() => setIsAddrModalOpen(false)} userProfile={userProfile} uid={authUser?.uid} onProfileUpdated={handleProfileUpdated} editAddress={addressToEdit} />
       {showAddressPicker && userProfile?.addresses?.length > 0 && (
