@@ -296,8 +296,6 @@ const ProfileSetupModal = ({ onSave, onClose }) => {
     if (!name.trim()) { setError('Please enter your name'); return; }
     if (!phone.trim()) { setError('Please enter your phone number'); return; }
 
-    // Validate Indian phone
-    const { validatePhone } = await import('./userProfileService.js');
     const normalized = validatePhone(phone);
     if (!normalized) {
       setError('Please enter a valid 10-digit Indian phone number');
@@ -626,37 +624,32 @@ const TrackingPage = ({ orderId, onBack, restaurantName }) => {
 
 
 
-// --- Order History Page Component ---
-const OrderHistoryPage = ({ onBack }) => {
-  const orders = [
-    {
-      id: '#4421',
-      restaurant: 'The Pizza Project - Downtown',
-      logo: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
-      status: 'Delivered',
-      date: 'Oct 24, 7:30 PM',
-      items: '1x Margherita Classic, 1x Coke Zero, 1x Garlic Bread',
-      price: 650.00,
-    },
-    {
-      id: '#4398',
-      restaurant: 'The Pizza Project - Uptown',
-      logo: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
-      status: 'Delivered',
-      date: 'Oct 15, 8:15 PM',
-      items: '2x Pepperoni Feast, 2x Large Coke',
-      price: 1240.00,
-    },
-    {
-      id: '#4350',
-      restaurant: 'The Pizza Project - Downtown',
-      logo: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&q=80&w=800",
-      status: 'Cancelled',
-      date: 'Sep 30, 6:45 PM',
-      items: '1x Veggie Supreme, 1x Garlic Bread',
-      price: 450.00,
-    }
-  ];
+// --- Order History Page Component (Live from Firestore) ---
+const OrderHistoryPage = ({ onBack, userId }) => {
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  useEffect(() => {
+    if (!userId) { setLoadingOrders(false); return; }
+    const q = query(
+      collection(db, 'orders'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(o => o.customerId === userId);
+      setOrders(list);
+      setLoadingOrders(false);
+    });
+    return () => unsub();
+  }, [userId]);
+
+  const formatDate = (ts) => {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  };
 
   return (
     <div className="order-history-page fade-in">
@@ -669,41 +662,47 @@ const OrderHistoryPage = ({ onBack }) => {
       </div>
 
       <div className="orders-list">
-        {orders.map(order => (
-          <div key={order.id} className="order-history-card">
-            <div className="order-card-top">
-              <img src={order.logo} alt="logo" className="order-rest-logo" />
-              <div className="order-info-main">
-                <h4 className="order-rest-name">{order.restaurant}</h4>
-                <p className="order-meta-info">{order.status} • {order.date}</p>
-              </div>
-              <span className={`status-badge ${order.status.toLowerCase()}`}>
-                {order.status}
-              </span>
-            </div>
-
-            <p className="order-items-summary">
-              {order.items.split(', ').map((item, i) => (
-                <span key={i}>
-                  <span className="qty-bold">{item.split('x ')[0]}x</span> {item.split('x ')[1]}
-                  {i < order.items.split(', ').length - 1 ? ', ' : ''}
+        {loadingOrders ? (
+          <div className="loading-state"><p>Loading orders...</p></div>
+        ) : orders.length === 0 ? (
+          <div className="loading-state"><p>No orders yet. Start ordering!</p></div>
+        ) : (
+          orders.map(order => (
+            <div key={order.id} className="order-history-card">
+              <div className="order-card-top">
+                <div className="order-rest-logo" style={{ background: 'var(--surface-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', width: '44px', height: '44px', fontSize: '18px' }}>🍽️</div>
+                <div className="order-info-main">
+                  <h4 className="order-rest-name">{order.restaurantName || 'Restaurant'}</h4>
+                  <p className="order-meta-info">{order.status} • {formatDate(order.createdAt)}</p>
+                </div>
+                <span className={`status-badge ${(order.status || '').toLowerCase()}`}>
+                  {order.status || 'placed'}
                 </span>
-              ))}
-            </p>
+              </div>
 
-            <div className="order-card-bottom">
-              <span className="order-total-price">₹{order.price.toFixed(2)}</span>
-              <div className="card-btns-row">
-                {order.status === 'Cancelled' ? (
-                  <button className="card-btn outline">Help</button>
-                ) : (
-                  <button className="card-btn outline">Rate</button>
-                )}
-                <button className="card-btn primary">Reorder</button>
+              <p className="order-items-summary">
+                {(order.items || []).map((item, i) => (
+                  <span key={i}>
+                    <span className="qty-bold">1x</span> {item.name}
+                    {i < order.items.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+              </p>
+
+              <div className="order-card-bottom">
+                <span className="order-total-price">₹{(order.totalAmount || 0).toFixed(2)}</span>
+                <div className="card-btns-row">
+                  {order.status === 'cancelled' ? (
+                    <button className="card-btn outline">Help</button>
+                  ) : (
+                    <button className="card-btn outline">Rate</button>
+                  )}
+                  <button className="card-btn primary">Reorder</button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
@@ -799,11 +798,10 @@ const AddressFormModal = ({ isOpen, onClose, userProfile, uid, onProfileUpdated,
 
     setSaving(true);
     try {
-      const svc = await import('./userProfileService.js');
       if (editAddress?.id !== undefined) {
-        await svc.updateAddress(uid, editAddress.id, address);
+        await updateAddress(uid, editAddress.id, address);
       } else {
-        await svc.addAddress(uid, address);
+        await addAddress(uid, address);
       }
       await onProfileUpdated();
       onClose();
@@ -914,7 +912,6 @@ const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSi
 
   const handleSaveContact = async () => {
     if (!editName.trim()) { setError('Name is required'); return; }
-    const { validatePhone } = await import('./userProfileService.js');
     const normalized = validatePhone(editPhone);
     if (!normalized) { setError('Enter a valid 10-digit number'); return; }
 
@@ -926,14 +923,12 @@ const ProfilePage = ({ onBack, onMenuItemClick, userProfile, onEditProfile, onSi
 
   const handleDeleteAddr = async (idx) => {
     if (!window.confirm("Delete this address?")) return;
-    const svc = await import('./userProfileService.js');
-    await svc.deleteAddress(uid, idx);
+    await deleteAddress(uid, idx);
     await onProfileUpdated();
   };
 
   const handleSetDefaultAddr = async (idx) => {
-    const svc = await import('./userProfileService.js');
-    await svc.setDefaultAddress(uid, idx);
+    await setDefaultAddress(uid, idx);
     await onProfileUpdated();
   };
 
@@ -1103,7 +1098,7 @@ const AddressPicker = ({ addresses, defaultIdx, onSelect, onClose }) => {
 import { db, auth } from './firebase';
 import { collection, onSnapshot, query, orderBy, getDoc, doc, addDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { signInAnonymously, onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
-import { getProfile, createProfile, updateProfile, setDefaultAddress } from './userProfileService.js';
+import { getProfile, createProfile, updateProfile, setDefaultAddress, addAddress, updateAddress, deleteAddress, validatePhone } from './userProfileService.js';
 import AuthPage from './AuthPage';
 
 // Haversine formula: calculates distance between two lat/lng points in km
@@ -1213,7 +1208,6 @@ function App() {
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
-        console.log("Customer App: Auth detected (UID:", user.uid, ")");
         setAuthUser(user);
 
         // Fetch profile
@@ -1226,7 +1220,6 @@ function App() {
             snapshot.forEach((doc) => {
               list.push({ id: doc.id, ...doc.data() });
             });
-            console.log("Customer App: Restaurants loaded:", list.length);
             setRestaurants(list);
             setLoading(false);
           }, (error) => {
@@ -1235,7 +1228,6 @@ function App() {
           });
         }
       } else {
-        console.log("Customer App: User is null, attempting anonymous login...");
         signInAnonymously(auth).catch((err) => {
           console.error("Customer App: Anonymous Login FAILED:", err);
           setAuthError(err.code || err.message);
@@ -1256,9 +1248,8 @@ function App() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setCustomerLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          console.log('Customer location detected:', pos.coords.latitude, pos.coords.longitude);
         },
-        (err) => console.log('Customer geolocation not available:', err.message),
+        () => {},
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
       );
     }
@@ -1269,7 +1260,6 @@ function App() {
   useEffect(() => {
     if (!selectedRestaurant) return;
 
-    console.log(`Customer App: Opening Menu Listener for ${selectedRestaurant.id}...`);
     const menuRef = collection(db, 'restaurants', selectedRestaurant.id, 'menu');
     const q = query(menuRef, orderBy('createdAt', 'desc'));
 
@@ -1549,7 +1539,7 @@ function App() {
       case 'ORDERS':
         return (
           <div className="app-container" style={{ padding: 0 }}>
-            <OrderHistoryPage onBack={() => setCurrentPage('HOME')} />
+            <OrderHistoryPage onBack={() => setCurrentPage('HOME')} userId={authUser?.uid} />
             <BottomNav activeTab="ORDERS" onTabClick={handleTabClick} />
           </div>
         );
@@ -1588,7 +1578,7 @@ function App() {
       case 'PROFILE_ORDERS':
         return (
           <div className="app-container" style={{ padding: 0 }}>
-            <OrderHistoryPage onBack={() => setCurrentPage('PROFILE')} />
+            <OrderHistoryPage onBack={() => setCurrentPage('PROFILE')} userId={authUser?.uid} />
             <BottomNav activeTab="PROFILE" onTabClick={handleTabClick} />
           </div>
         );
