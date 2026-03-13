@@ -119,10 +119,35 @@ function App() {
   // Auth and Firestore listener
   useEffect(() => {
     let unsubscribeSnapshot = null;
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setAuthUser(user);
-        fetchUserProfile(user.uid);
+        const profile = await fetchUserProfile(user.uid);
+        
+        // Auto-save auth details if missing in profile
+        if (!user.isAnonymous) {
+          const updates = {};
+          if (user.phoneNumber && (!profile || !profile.phone)) {
+            updates.phone = user.phoneNumber.replace('+91', '').trim();
+          }
+          if (user.email && (!profile || !profile.email)) {
+            updates.email = user.email;
+          }
+          if (user.displayName && (!profile || !profile.name)) {
+            updates.name = user.displayName;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            console.log('Auto-syncing auth details to profile:', updates);
+            if (profile) {
+              await updateProfile(user.uid, updates);
+            } else {
+              await createProfile(user.uid, updates);
+            }
+            fetchUserProfile(user.uid);
+          }
+        }
+
         if (!unsubscribeSnapshot) {
           unsubscribeSnapshot = onSnapshot(collection(db, 'restaurants'), (snapshot) => {
             const list = [];

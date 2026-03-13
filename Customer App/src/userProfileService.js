@@ -20,12 +20,13 @@ export async function getProfile(uid) {
 /**
  * Create a new user profile
  * @param {string} uid
- * @param {{ name: string, phone: string }} data
+ * @param {{ name: string, phone: string, email?: string }} data
  */
-export async function createProfile(uid, { name, phone }) {
+export async function createProfile(uid, { name, phone, email }) {
     await setDoc(doc(db, 'users', uid), {
-        name,
-        phone,
+        name: name || '',
+        phone: phone || '',
+        email: email || '',
         addresses: [],
         defaultAddressIndex: 0,
         createdAt: serverTimestamp(),
@@ -34,9 +35,9 @@ export async function createProfile(uid, { name, phone }) {
 }
 
 /**
- * Update name and/or phone
+ * Update profile fields
  * @param {string} uid
- * @param {{ name?: string, phone?: string }} partial
+ * @param {{ name?: string, phone?: string, email?: string }} partial
  */
 export async function updateProfile(uid, partial) {
     await setDoc(doc(db, 'users', uid), {

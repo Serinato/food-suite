@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MerchantApp</string>
+    <string name="title_activity_main">MerchantApp</string>
+    <string name="package_name">com.yourdomain.merchantapp</string>
+    <string name="custom_url_scheme">com.yourdomain.merchantapp</string>
+</resources>

@@ -7,13 +7,18 @@ import {
   deleteDoc,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  query,
+  where,
+  orderBy
 } from 'firebase/firestore';
 import {
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
+import { getToken, onMessage } from 'firebase/messaging';
 import type { User } from 'firebase/auth';
+import { messaging } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { scanMenuFromImage } from './aiService';
 import { Camera, Image as ImageIcon, Trash2, ClipboardList, Store } from 'lucide-react';
@@ -55,6 +60,10 @@ function App() {
   const [dishImageSuccess, setDishImageSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'ORDERS'>('DASHBOARD');
 
+  // global notification toggle
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   // New Scan States
   const [scanning, setScanning] = useState(false);
   const [scanResults, setScanResults] = useState<any[]>([]);
@@ -80,7 +89,9 @@ function App() {
     latitude: null as number | null,
     longitude: null as number | null,
     cuisine: '',
-    isOpen: true
+    isOpen: true,
+    phone: '',
+    email: ''
   });
 
   useEffect(() => {
@@ -95,6 +106,203 @@ function App() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // load saved notification preference
+  useEffect(() => {
+    const stored = localStorage.getItem('merchant_notifications_enabled');
+    if (stored === 'true') {
+      setNotifEnabled(true);
+    }
+  }, []);
+
+  // persist preference
+  useEffect(() => {
+    localStorage.setItem('merchant_notifications_enabled', notifEnabled.toString());
+  }, [notifEnabled]);
+
+  // initialize audio once - must be called by a user gesture to "unlock" audio on mobile
+  const initRing = () => {
+    if (!audioRef.current) {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+      audio.volume = 1;
+      audio.preload = 'auto';
+      audioRef.current = audio;
+      
+      // Play and immediately pause to "unlock" the audio context
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+      }).catch(e => console.log("Silent unlock failed (expected if not from gesture):", e));
+    }
+  };
+
+  // Track new orders to highlight them
+  const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
+
+  // FCM Setup
+  useEffect(() => {
+    if (!user || !notifEnabled || !messaging) return;
+
+    const setupFCM = async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const currentToken = await getToken(messaging, {
+          vapidKey: 'BIsy3-SjO8Yh4Hn-U4zB8mP6X3p0f8n3k6p9q4n5m6l7k8j9i0h1g2f3e4d5c6b7a', // We will need a real one
+          serviceWorkerRegistration: registration
+        });
+        
+        if (currentToken) {
+          console.log('FCM Token:', currentToken);
+          // Save token to restaurant profile to allow cloud triggers
+          await setDoc(doc(db, 'restaurants', user.uid), { fcmToken: currentToken }, { merge: true });
+        }
+      } catch (err) {
+        console.error('FCM Error:', err);
+      }
+    };
+
+    setupFCM();
+    
+    // Foreground message handler
+    const unsubFCM = onMessage(messaging, (payload) => {
+      console.log('Foreground message:', payload);
+      if (payload.data?.orderId) {
+        // High priority reload or alert
+      }
+    });
+
+    return () => unsubFCM();
+  }, [user, notifEnabled]);
+
+  const notify = async (order: any) => {
+    // Play sound
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => console.log("Audio play blocked:", e));
+    }
+
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
+      const orderShortId = order.id.slice(-4).toUpperCase();
+      const title = `New Order #${orderShortId}! 🔔`;
+      const options = {
+        body: `Total: ₹${order.totalAmount} from ${order.customerInfo?.name || 'Customer'}.`,
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
+        vibrate: [200, 100, 200, 100, 200],
+        // Using a truly unique tag forces Android to keep them separate
+        tag: `order-${order.id}-${Date.now()}`, 
+        renotify: true, // Forces sound/vibration even if tag matches (though it won't here)
+        data: {
+          orderId: order.id,
+          url: window.location.origin + '?tab=orders',
+          timestamp: Date.now()
+        }
+      };
+
+      try {
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.ready;
+          if (registration) {
+            await registration.showNotification(title, options);
+            return;
+          }
+        }
+        
+        // Desktop fallback
+        const n = new Notification(title, options);
+        n.onclick = () => {
+          window.focus();
+          setActiveTab('ORDERS');
+          n.close();
+        };
+      } catch (e) {
+        console.error("Notification error:", e);
+      }
+    }
+  };
+
+  // Listen to orders globally when notifications enabled
+  useEffect(() => {
+    if (!restaurantId || !notifEnabled) return;
+    initRing();
+
+    const q = query(
+      collection(db, 'orders'),
+      where('restaurantId', '==', restaurantId),
+      orderBy('createdAt', 'desc')
+    );
+
+    // Use localStorage to track which orders we've already notified for
+    // This makes notifications persistent across reloads/backgrounding
+    const seenOrdersKey = `notified_orders_${restaurantId}`;
+    const getSeenOrders = () => {
+      try {
+        const stored = localStorage.getItem(seenOrdersKey);
+        return stored ? JSON.parse(stored) : [];
+      } catch { return []; }
+    };
+    
+    let seenOrders = getSeenOrders();
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      // If no orders, nothing to do
+      if (snapshot.empty) return;
+
+      const newOrdersToNotify: any[] = [];
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const orderId = change.doc.id;
+          if (!seenOrders.includes(orderId)) {
+            newOrdersToNotify.push({ id: orderId, ...change.doc.data() });
+            seenOrders.push(orderId);
+          }
+        }
+      });
+
+      // Update seen list (keep only last 50 IDs to prevent storage bloat)
+      const updatedSeen = seenOrders.slice(-50);
+      localStorage.setItem(seenOrdersKey, JSON.stringify(updatedSeen));
+      seenOrders = updatedSeen;
+
+      if (newOrdersToNotify.length > 0) {
+        // Space out notifications to prevent OS throttling
+        newOrdersToNotify.forEach((order, index) => {
+          setTimeout(() => notify(order), index * 1500);
+        });
+      }
+    });
+
+    return () => unsub();
+  }, [restaurantId, notifEnabled]);
+
+  // Listen for messages from Service Worker (for background clicks)
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'NAVIGATE_TAB') {
+        if (event.data.tab === 'ORDERS') {
+          setActiveTab('ORDERS');
+        }
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Read tab from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'orders') {
+      setActiveTab('ORDERS');
+      // Clear URL param without reload
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   useEffect(() => {
@@ -119,7 +327,7 @@ function App() {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setRestaurantProfile({
+        const updatedProfile = {
           name: data.name || '',
           description: data.description || '',
           image: data.image || data.imageUrl || '',
@@ -127,9 +335,46 @@ function App() {
           latitude: data.latitude || null,
           longitude: data.longitude || null,
           cuisine: data.cuisine || '',
-          isOpen: data.isOpen !== undefined ? data.isOpen : true
-        } as any);
+          isOpen: data.isOpen !== undefined ? data.isOpen : true,
+          phone: data.phone || '',
+          email: data.email || ''
+        };
+        setRestaurantProfile(updatedProfile as any);
         setRestaurantName(data.name || 'Your Restaurant');
+
+        // Auto-save auth details if missing
+        if (auth.currentUser) {
+          const updates: any = {};
+          if (auth.currentUser.phoneNumber && !data.phone) {
+            updates.phone = auth.currentUser.phoneNumber.replace('+91', '').trim();
+          }
+          if (auth.currentUser.email && !data.email) {
+            updates.email = auth.currentUser.email;
+          }
+          if (auth.currentUser.displayName && !data.name) {
+            updates.name = auth.currentUser.displayName;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            console.log('Auto-syncing merchant auth details to profile:', updates);
+            await setDoc(docRef, updates, { merge: true });
+            // Reflect in state immediately
+            setRestaurantProfile(prev => ({ ...prev, ...updates }));
+            if (updates.name) setRestaurantName(updates.name);
+          }
+        }
+      } else if (auth.currentUser) {
+        // Doc doesn't exist, create it with auth details
+        const initialData = {
+          name: auth.currentUser.displayName || '',
+          email: auth.currentUser.email || '',
+          phone: auth.currentUser.phoneNumber ? auth.currentUser.phoneNumber.replace('+91', '').trim() : '',
+          isOpen: true,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(docRef, initialData);
+        setRestaurantProfile(prev => ({ ...prev, ...initialData }));
+        if (initialData.name) setRestaurantName(initialData.name);
       }
     } catch (_error) {
       // Silently handle profile fetch errors
@@ -530,7 +775,7 @@ function App() {
         <div className="header-row">
           <div className="header-titles">
             <h1>{restaurantName ? `${restaurantName} - Portal` : 'Merchant Portal'}</h1>
-            <p className="header-subtitle">Manage your restaurant identity and menu in real-time</p>
+            <p className="header-subtitle">Manage your restaurant identity and menu in real-time <small style={{opacity: 0.5}}>(v3.4 - Cloud Ready)</small></p>
           </div>
           <div className="header-actions">
             <div className="header-toggle-group" onClick={handleToggleOpen}>
@@ -541,6 +786,37 @@ function App() {
                 {restaurantProfile.isOpen ? 'Open' : 'Closed'}
               </span>
             </div>
+            <button
+              onClick={async () => {
+                if (!notifEnabled) {
+                  const perm = await Notification.requestPermission();
+                  if (perm !== 'granted') return alert('Permission denied');
+                  setNotifEnabled(true);
+                  // Critical: initialize audio on this click to "unlock" sound for mobile
+                  initRing();
+                }
+                notify({ id: 'test-' + Date.now(), totalAmount: 100, customerInfo: { name: 'Test User' } });
+              }}
+              className="secondary-btn"
+              style={{ marginRight: '10px', opacity: 0.8 }}
+            >
+              Test Alert
+            </button>
+            <button
+              onClick={async () => {
+                if (!notifEnabled) {
+                  const perm = await Notification.requestPermission();
+                  if (perm !== 'granted') return alert('Permission denied');
+                  // Unlock sound
+                  initRing();
+                }
+                setNotifEnabled(prev => !prev);
+              }}
+              className="secondary-btn"
+              style={{ marginRight: '10px' }}
+            >
+              {notifEnabled ? 'Disable Alerts' : 'Enable Alerts'}
+            </button>
             <span className="user-email">{user.email}</span>
             <button className="secondary-btn logout-btn" onClick={handleLogout}>Log Out</button>
           </div>
@@ -562,7 +838,15 @@ function App() {
       </header>
 
       {activeTab === 'ORDERS' ? (
-        <OrdersView restaurantId={restaurantId} />
+        <OrdersView
+          restaurantId={restaurantId}
+          newOrderIds={newOrderIds}
+          onClearNewOrder={(id) => setNewOrderIds(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          })}
+        />
       ) : (
         <div className="merchant-layout">
           <aside className="merchant-sidebar">
