@@ -19,5 +19,12 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
-export const messaging = getMessaging(app);
+
+let messagingInstance = null;
+try {
+    messagingInstance = getMessaging(app);
+} catch (e) {
+    console.warn("Firebase Messaging initialization failed:", e);
+}
+export const messaging = messagingInstance;
 export const analytics = getAnalytics(app);
