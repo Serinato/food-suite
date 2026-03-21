@@ -15,7 +15,7 @@ const TopBar: React.FC<TopBarProps> = ({ restaurantName, userEmail, notifEnabled
     <header className="top-bar">
       <div className="top-bar-content">
         <div className="top-bar-brand">
-          <h1>{restaurantName || 'Merchant Portal'}</h1>
+          <h1>{restaurantName || 'Kitchen Portal'}</h1>
           <span className="user-email">{userEmail}</span>
         </div>
         <div className="top-bar-actions">

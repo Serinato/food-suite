@@ -22,11 +22,12 @@ export interface RestaurantProfile {
   description: string;
   image: string;
   address: string;
+  detailedAddress?: string;
   latitude: number | null;
   longitude: number | null;
   cuisine: string;
   isOpen: boolean;
-  phone: string;
+  phones: string[];
   email: string;
 }
 
@@ -45,11 +46,12 @@ export function useMerchantState() {
     description: '',
     image: '',
     address: '',
+    detailedAddress: '',
     latitude: null,
     longitude: null,
     cuisine: '',
     isOpen: true,
-    phone: '',
+    phones: [],
     email: ''
   });
 
@@ -102,21 +104,22 @@ export function useMerchantState() {
           description: data.description || '',
           image: data.image || data.imageUrl || '',
           address: data.address || '',
+          detailedAddress: data.detailedAddress || '',
           latitude: data.latitude || null,
           longitude: data.longitude || null,
           cuisine: data.cuisine || '',
           isOpen: data.isOpen !== undefined ? data.isOpen : true,
-          phone: data.phone || '',
+          phones: data.phones || (data.phone ? [data.phone] : []), // backward compatibility
           email: data.email || ''
         };
         setRestaurantProfile(updatedProfile);
-        setRestaurantName(data.name || 'Your Restaurant');
+        setRestaurantName(data.name || 'Your Kitchen');
 
         // Auto-save auth details if missing
         if (auth.currentUser) {
             const updates: any = {};
-            if (auth.currentUser.phoneNumber && !data.phone) {
-              updates.phone = auth.currentUser.phoneNumber.replace('+91', '').trim();
+            if (auth.currentUser.phoneNumber && (!data.phones || data.phones.length === 0) && !data.phone) {
+              updates.phones = [auth.currentUser.phoneNumber.replace(/^\+91/, '').trim()];
             }
             if (auth.currentUser.email && !data.email) {
               updates.email = auth.currentUser.email;
@@ -135,7 +138,7 @@ export function useMerchantState() {
         const initialData = {
           name: auth.currentUser.displayName || '',
           email: auth.currentUser.email || '',
-          phone: auth.currentUser.phoneNumber ? auth.currentUser.phoneNumber.replace('+91', '').trim() : '',
+          phones: auth.currentUser.phoneNumber ? [auth.currentUser.phoneNumber.replace(/^\+91/, '').trim()] : [],
           isOpen: true,
           createdAt: new Date().toISOString()
         };

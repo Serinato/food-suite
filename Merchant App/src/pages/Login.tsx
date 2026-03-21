@@ -115,7 +115,7 @@ const Login: React.FC = () => {
             <Flame size={40} color="#fff" />
           </div>
         </div>
-        <h1>Merchant Portal</h1>
+        <h1>Kitchen Portal</h1>
         <p className="login-subtitle">
           {authStep === 'PHONE' ? 'Login or Signup using your mobile number' : `Enter the OTP sent to +91 ${phoneNumber}`}
         </p>
