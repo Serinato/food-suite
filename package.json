@@ -4,12 +4,14 @@
   "workspaces": [
     "Customer App",
     "Merchant App",
+    "Admin App",
     "Shared Core"
   ],
   "scripts": {
     "dev:customer": "npm run dev -w \"Customer App\"",
     "dev:merchant": "npm run dev -w \"Merchant App\"",
-    "build": "npm run build -w \"Customer App\" && npm run build -w \"Merchant App\"",
+    "dev:admin": "npm run dev -w \"Admin App\"",
+    "build": "npm run build -w \"Customer App\" && npm run build -w \"Merchant App\" && npm run build -w \"Admin App\"",
     "install:all": "npm install"
   }
 }
