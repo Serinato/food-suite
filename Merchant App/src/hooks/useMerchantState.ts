@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { db, auth, storage, messaging } from '../firebase';
+import { db, auth, messaging } from '../firebase';
 import { collection, query, where, orderBy, onSnapshot, setDoc, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -174,7 +174,7 @@ export function useMerchantState() {
     const setupFCM = async () => {
       try {
         const registration = await navigator.serviceWorker.ready;
-        const currentToken = await getToken(messaging, {
+        const currentToken = await getToken(messaging!, {
           vapidKey: 'BIsy3-SjO8Yh4Hn-U4zB8mP6X3p0f8n3k6p9q4n5m6l7k8j9i0h1g2f3e4d5c6b7a',
           serviceWorkerRegistration: registration
         });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { GoogleAuthProvider, signInWithPopup, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { Store, Flame } from 'lucide-react';
+import { Flame } from 'lucide-react';
 import './Login.css';
 
 declare global {

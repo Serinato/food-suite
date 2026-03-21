@@ -15,7 +15,7 @@ interface MenuContext {
 }
 
 const MenuManager: React.FC = () => {
-  const { restaurantId, restaurantProfile, menuItems } = useOutletContext<MenuContext>();
+  const { restaurantId, menuItems } = useOutletContext<MenuContext>();
   const [syncing, setSyncing] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   

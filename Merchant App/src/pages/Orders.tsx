@@ -1,7 +1,7 @@
 import React from 'react';
 import { useOutletContext } from 'react-router-dom';
 import OrdersView from '../OrdersView';
-import type { RestaurantProfile } from '../hooks/useMerchantState';
+// Removed unused RestaurantProfile import
 
 interface OrdersContext {
   restaurantId: string;
