@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
-import { Camera, Image as ImageIcon, Trash2, Plus, X, Loader2, CheckCircle2, LocateFixed } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2, Plus, X, Loader2, CheckCircle2, LocateFixed, Pencil, Check } from 'lucide-react';
 import type { RestaurantProfile } from '../hooks/useMerchantState';
 import './Dashboard.css';
 
@@ -21,6 +21,11 @@ const Dashboard: React.FC = () => {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [locatingUser, setLocatingUser] = useState(false);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
+  
+  const [editingPhoneIdx, setEditingPhoneIdx] = useState<number | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [draftPhone, setDraftPhone] = useState<string>('');
+  const [phoneError, setPhoneError] = useState<string>('');
   
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapLocation, setMapLocation] = useState<{lat: number, lng: number, address: string} | null>(null);
@@ -166,6 +171,10 @@ const Dashboard: React.FC = () => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingPhoneIdx !== null || isAddingNew) {
+      setPhoneError('Please save (✅) or cancel (❌) this number first.');
+      return;
+    }
     if (uploadingImage) return; // Prevent saving while uploading
     setProfileSyncing(true);
     try {
@@ -222,8 +231,12 @@ const Dashboard: React.FC = () => {
   };
 
   const addPhone = () => {
-    if ((restaurantProfile.phones || []).length < 3) {
-      setRestaurantProfile({ ...restaurantProfile, phones: [...(restaurantProfile.phones || []), ''] });
+    const phones = restaurantProfile.phones || [];
+    if (phones.length < 3) {
+      setIsAddingNew(true);
+      setEditingPhoneIdx(null);
+      setDraftPhone('');
+      setPhoneError('');
     }
   };
 
@@ -231,6 +244,51 @@ const Dashboard: React.FC = () => {
     const next = [...(restaurantProfile.phones || [])];
     next.splice(idx, 1);
     setRestaurantProfile({ ...restaurantProfile, phones: next });
+    if (editingPhoneIdx === idx) {
+      cancelPhoneEdit();
+    }
+  };
+
+  const startEditingPhone = (idx: number, currentVal: string) => {
+    setEditingPhoneIdx(idx);
+    setIsAddingNew(false);
+    setDraftPhone(currentVal);
+    setPhoneError('');
+  };
+
+  const savePhoneEdit = () => {
+    if (draftPhone.length < 10) {
+      setPhoneError('Invalid number. Must be 10 digits.');
+      return;
+    }
+    const next = [...(restaurantProfile.phones || [])];
+    if (isAddingNew) {
+      next.push(draftPhone);
+    } else if (editingPhoneIdx !== null) {
+      next[editingPhoneIdx] = draftPhone;
+    }
+    setRestaurantProfile({ ...restaurantProfile, phones: next });
+    setEditingPhoneIdx(null);
+    setIsAddingNew(false);
+    setDraftPhone('');
+    setPhoneError('');
+  };
+
+  const cancelPhoneEdit = () => {
+    setEditingPhoneIdx(null);
+    setIsAddingNew(false);
+    setDraftPhone('');
+    setPhoneError('');
+  };
+
+  const handlePhoneBlur = () => {
+    if (draftPhone.length > 0 && draftPhone.length < 10) {
+      setPhoneError('Invalid number. Must be 10 digits. Click ✅ to save.');
+    } else if (draftPhone.length === 10) {
+      setPhoneError('Click ✅ to save this number, or ❌ to cancel.');
+    } else {
+      setPhoneError('Click ❌ to cancel if empty.');
+    }
   };
 
   const currentWordCount = restaurantProfile.description ? restaurantProfile.description.trim().split(/\s+/).filter(w => w.length > 0).length : 0;
@@ -242,6 +300,7 @@ const Dashboard: React.FC = () => {
         <div>
           <h2>We are currently:</h2>
           <div className="status-badge-lg" data-open={restaurantProfile.isOpen}>
+            {restaurantProfile.isOpen && <span className="pulse-dot"></span>}
             {restaurantProfile.isOpen ? 'OPEN' : 'CLOSED'}
           </div>
         </div>
@@ -252,180 +311,254 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <section className="profile-section card-box">
-        <h2>Details of your kitchen</h2>
-        <form onSubmit={handleUpdateProfile} className="profile-form">
-          
-          {/* Name & Cuisine */}
-          <div className="input-group">
-            <input
-              type="text"
-              value={restaurantProfile.name}
-              onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
-              placeholder="Kitchen's Name"
-              className="styled-input"
-              required
-            />
-          </div>
-          <div className="input-group">
-            <input
-              type="text"
-              value={restaurantProfile.cuisine}
-              onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
-              placeholder="Cuisine Type (e.g. Punjabi, Home Cooked)"
-              className="styled-input"
-              required
-            />
-          </div>
-
-          {/* Description */}
-          <div className="input-group">
-            <textarea
-              value={restaurantProfile.description}
-              onChange={handleDescriptionChange}
-              placeholder="You can describe your kitchen here in 100 words.."
-              className="styled-input"
-              rows={4}
-            />
-            <div style={{ textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              {currentWordCount}/100 words
+      <form onSubmit={handleUpdateProfile} className="profile-form-container">
+        {/* Card 1: Identity */}
+        <div className="card-box card-basic card-animation" style={{ animationDelay: '0.1s' }}>
+          <h2 className="card-title">
+            <div className="card-icon">🍳</div>
+            Kitchen Identity
+          </h2>
+          <div className="profile-form">
+            <div className="input-group">
+              <input
+                type="text"
+                value={restaurantProfile.name}
+                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, name: e.target.value })}
+                placeholder="Kitchen's Name"
+                className="styled-input"
+                required
+              />
+            </div>
+            <div className="input-group">
+              <input
+                type="text"
+                value={restaurantProfile.cuisine}
+                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, cuisine: e.target.value })}
+                placeholder="Cuisine Type (e.g. Punjabi, Home Cooked)"
+                className="styled-input"
+                required
+              />
+            </div>
+            <div className="input-group">
+              <textarea
+                value={restaurantProfile.description}
+                onChange={handleDescriptionChange}
+                placeholder="You can describe your kitchen here in 100 words.."
+                className="styled-input"
+                rows={4}
+              />
+              <div className="word-count">
+                {currentWordCount}/100 words
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Contact Numbers */}
-          <div className="input-group">
-            <label>Contact Numbers (Up to 3)</label>
-            {safePhones.map((phone, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '0 12px', flex: 1 }}>
-                  <span style={{ fontWeight: '600', color: 'var(--text-muted)', marginRight: '8px', borderRight: '1px solid var(--border)', paddingRight: '8px' }}>+91</span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      const next = [...safePhones];
-                      next[idx] = val;
-                      setRestaurantProfile({ ...restaurantProfile, phones: next });
-                    }}
-                    placeholder="98765 43210"
-                    style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', padding: '14px 0', fontSize: '1rem', color: 'var(--text-main)' }}
-                    maxLength={10}
-                    required
-                  />
+        {/* Card 2: Contact & Location */}
+        <div className="card-box card-contact card-animation" style={{ animationDelay: '0.2s' }}>
+          <h2 className="card-title">
+            <div className="card-icon">📍</div>
+            Contact & Location
+          </h2>
+          <div className="profile-form">
+            <div className="input-group">
+              <label>Contact Numbers (Up to 3)</label>
+              {safePhones.map((phone, idx) => {
+                const isEditing = editingPhoneIdx === idx && !isAddingNew;
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', marginBottom: '4px' }}>
+                    <div className="phone-row" style={{ marginBottom: isEditing && phoneError ? '2px' : '8px' }}>
+                      {isEditing ? (
+                        <div className="phone-wrapper">
+                          <span className="phone-prefix">+91</span>
+                          <input
+                            type="tel"
+                            value={draftPhone}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                              setDraftPhone(val);
+                              if (val.length === 10) setPhoneError('');
+                            }}
+                            onBlur={handlePhoneBlur}
+                            placeholder="98765 43210"
+                            className="phone-input"
+                            maxLength={10}
+                            autoFocus
+                          />
+                          <button type="button" onClick={savePhoneEdit} onMouseDown={(e) => e.preventDefault()} className="phone-action-btn save" title="Save Number">
+                            <Check size={18} />
+                          </button>
+                          <button type="button" onClick={cancelPhoneEdit} onMouseDown={(e) => e.preventDefault()} className="phone-action-btn cancel" title="Cancel">
+                            <X size={18} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="phone-readonly-wrapper">
+                          <span className="phone-prefix">+91</span>
+                          <span className="phone-display">{phone}</span>
+                          <button type="button" onClick={() => startEditingPhone(idx, phone)} className="phone-action-btn edit" title="Edit Number">
+                            <Pencil size={16} />
+                          </button>
+                          {safePhones.length > 1 && (
+                            <button type="button" onClick={() => removePhone(idx)} className="phone-action-btn cancel" title="Remove Number" style={{ marginLeft: '4px' }}>
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {isEditing && phoneError && <span className="phone-error-text">{phoneError}</span>}
+                  </div>
+                );
+              })}
+
+              {isAddingNew && (
+                <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '4px' }}>
+                  <div className="phone-row" style={{ marginBottom: phoneError ? '2px' : '8px' }}>
+                    <div className="phone-wrapper">
+                      <span className="phone-prefix">+91</span>
+                      <input
+                        type="tel"
+                        value={draftPhone}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setDraftPhone(val);
+                          if (val.length === 10) setPhoneError('');
+                        }}
+                        onBlur={handlePhoneBlur}
+                        placeholder="98765 43210"
+                        className="phone-input"
+                        maxLength={10}
+                        autoFocus
+                      />
+                      <button type="button" onClick={savePhoneEdit} onMouseDown={(e) => e.preventDefault()} className="phone-action-btn save" title="Save Number">
+                        <Check size={18} />
+                      </button>
+                      <button type="button" onClick={cancelPhoneEdit} onMouseDown={(e) => e.preventDefault()} className="phone-action-btn cancel" title="Cancel">
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  {phoneError && <span className="phone-error-text">{phoneError}</span>}
                 </div>
-                {safePhones.length > 1 && (
-                  <button type="button" onClick={() => removePhone(idx)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 'var(--radius-md)', padding: '0 16px', cursor: 'pointer' }}>
-                    <X size={18} />
-                  </button>
+              )}
+
+              {!isAddingNew && safePhones.length < 3 && editingPhoneIdx === null && (
+                <button type="button" onClick={addPhone} className="add-number-btn">
+                  <Plus size={16} /> Add Number
+                </button>
+              )}
+            </div>
+
+            <div className="input-group">
+              <label>Kitchen Address</label>
+              <div className="location-container" style={{ marginBottom: '12px' }}>
+                {(!restaurantProfile.latitude || isEditingLocation) ? (
+                  <div className="location-editing">
+                    <div className="location-input-wrapper with-icon">
+                      <input
+                        ref={locationInputCallbackRef}
+                        type="text"
+                        defaultValue={restaurantProfile.address}
+                        onChange={(e) => setRestaurantProfile({ ...restaurantProfile, address: e.target.value })}
+                        placeholder="Search Google Places..."
+                        className="styled-input pr-12"
+                      />
+                      <button type="button" className={`inline-locate-btn ${locatingUser ? 'pulsing' : ''}`} onClick={handleUseMyLocation} disabled={locatingUser} title="Drop pin on map">
+                        {locatingUser ? <Loader2 size={18} className="spin-anim" /> : <LocateFixed size={18} />}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="location-display-card">
+                    <div className="card-map-pin"></div>
+                    <div className="card-content">
+                      <div className="location-label">Verified Kitchen Location</div>
+                      <div className="location-address">{restaurantProfile.address}</div>
+                      <button type="button" className="text-btn change-loc-btn mt-2" onClick={() => setIsEditingLocation(true)}>Change Area Focus</button>
+                    </div>
+                  </div>
                 )}
               </div>
-            ))}
-            {safePhones.length < 3 && (
-              <button type="button" onClick={addPhone} className="styled-btn-secondary" style={{ width: 'fit-content', borderStyle: 'dashed', padding: '8px 16px', fontSize: '0.9rem' }}>
-                <Plus size={16} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} /> Add Number
-              </button>
-            )}
+              
+              <input
+                type="text"
+                value={restaurantProfile.detailedAddress || ''}
+                onChange={(e) => setRestaurantProfile({ ...restaurantProfile, detailedAddress: e.target.value })}
+                placeholder="Flat/House no., Building, Street (Optional)"
+                className="styled-input"
+              />
+            </div>
           </div>
+        </div>
 
-          {/* Address */}
-          <div className="input-group">
-            <label>Kitchen Address</label>
-            <div className="location-container" style={{ marginBottom: '12px' }}>
-              {(!restaurantProfile.latitude || isEditingLocation) ? (
-                <div className="location-editing">
-                  <div className="location-input-wrapper with-icon">
-                    <input
-                      ref={locationInputCallbackRef}
-                      type="text"
-                      defaultValue={restaurantProfile.address}
-                      onChange={(e) => setRestaurantProfile({ ...restaurantProfile, address: e.target.value })}
-                      placeholder="Search Google Places..."
-                      className="styled-input pr-12"
-                    />
-                    <button type="button" className={`inline-locate-btn ${locatingUser ? 'pulsing' : ''}`} onClick={handleUseMyLocation} disabled={locatingUser} title="Drop pin on map">
-                      {locatingUser ? <Loader2 size={18} className="spin-anim" /> : <LocateFixed size={18} />}
+        {/* Card 3: Banner */}
+        <div className="card-box card-media card-animation" style={{ animationDelay: '0.3s' }}>
+          <h2 className="card-title">
+            <div className="card-icon">📸</div>
+            Kitchen Banner
+          </h2>
+          <div className="profile-form">
+            <div className="input-group" style={{ marginTop: '12px' }}>
+              <label>Kitchen Banner Image (Optional)</label>
+              <div className="image-options">
+                <input type="file" accept="image/*" onChange={handleImageUpload} id="header-image-upload" className="file-input-hidden" disabled={uploadingImage} />
+                <label htmlFor="header-image-upload" className={`upload-btn styled-btn-outline ${uploadingImage ? 'disabled' : ''}`}>
+                  {uploadingImage ? (
+                    <><Loader2 size={18} className="spin-anim" /> Uploading...</>
+                  ) : uploadSuccess ? (
+                    <><CheckCircle2 size={18} color="#22c55e" /> Uploaded!</>
+                  ) : (
+                    <><ImageIcon size={18} /> Gallery</>
+                  )}
+                </label>
+
+                <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} id="header-image-camera" className="file-input-hidden" disabled={uploadingImage} />
+                <label htmlFor="header-image-camera" className={`upload-btn styled-btn-outline ${uploadingImage ? 'disabled' : ''}`}>
+                  {uploadingImage ? (
+                    <><Loader2 size={18} className="spin-anim" /> Uploading...</>
+                  ) : uploadSuccess ? (
+                    <><CheckCircle2 size={18} color="#22c55e" /> Done!</>
+                  ) : (
+                    <><Camera size={18} /> Camera</>
+                  )}
+                </label>
+              </div>
+
+              {restaurantProfile.image && (
+                <div className="image-preview-box">
+                  <div className="preview-header">
+                    <span className="tiny-caps">Preview</span>
+                    <button type="button" onClick={() => { setRestaurantProfile({ ...restaurantProfile, image: '' }); setUploadSuccess(false); }} className="remove-btn">
+                      <Trash2 size={14} /> Remove
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="location-display-card">
-                  <div className="card-map-pin"></div>
-                  <div className="card-content">
-                    <div className="location-label">Verified Kitchen Location</div>
-                    <div className="location-address">{restaurantProfile.address}</div>
-                    <button type="button" className="text-btn change-loc-btn mt-2" onClick={() => setIsEditingLocation(true)}>Change Area Focus</button>
+                  <div className="preview-image-wrapper">
+                    <img src={restaurantProfile.image} alt="Header" />
+                    <div className="preview-gradient-overlay"></div>
+                    <div className="preview-content">
+                      <div className="preview-text">
+                          <h3>{restaurantProfile.name || "Kitchen's Name"}</h3>
+                          <p>{restaurantProfile.cuisine || 'Cuisine Type'}</p>
+                      </div>
+                    </div>
                   </div>
+                  <p className="preview-note">
+                    This is how kitchen's image will appear to customers.
+                  </p>
                 </div>
               )}
             </div>
-            
-            <input
-              type="text"
-              value={restaurantProfile.detailedAddress || ''}
-              onChange={(e) => setRestaurantProfile({ ...restaurantProfile, detailedAddress: e.target.value })}
-              placeholder="Flat/House no., Building, Street (Optional)"
-              className="styled-input"
-            />
           </div>
+        </div>
 
-          {/* Header Image */}
-          <div className="input-group" style={{ marginTop: '12px' }}>
-            <label>Kitchen Banner Image (Optional)</label>
-            <div className="image-options">
-              <input type="file" accept="image/*" onChange={handleImageUpload} id="header-image-upload" className="file-input-hidden" disabled={uploadingImage} />
-              <label htmlFor="header-image-upload" className={`upload-btn styled-btn-outline ${uploadingImage ? 'disabled' : ''}`}>
-                {uploadingImage ? (
-                  <><Loader2 size={18} className="spin-anim" /> Uploading...</>
-                ) : uploadSuccess ? (
-                  <><CheckCircle2 size={18} color="#22c55e" /> Uploaded!</>
-                ) : (
-                  <><ImageIcon size={18} /> Gallery</>
-                )}
-              </label>
-
-              <input type="file" accept="image/*" capture="environment" onChange={handleImageUpload} id="header-image-camera" className="file-input-hidden" disabled={uploadingImage} />
-              <label htmlFor="header-image-camera" className={`upload-btn styled-btn-outline ${uploadingImage ? 'disabled' : ''}`}>
-                {uploadingImage ? (
-                  <><Loader2 size={18} className="spin-anim" /> Uploading...</>
-                ) : uploadSuccess ? (
-                  <><CheckCircle2 size={18} color="#22c55e" /> Done!</>
-                ) : (
-                  <><Camera size={18} /> Camera</>
-                )}
-              </label>
-            </div>
-
-            {restaurantProfile.image && (
-              <div className="image-preview-box">
-                <div className="preview-header">
-                  <span className="tiny-caps">Preview</span>
-                  <button type="button" onClick={() => { setRestaurantProfile({ ...restaurantProfile, image: '' }); setUploadSuccess(false); }} className="remove-btn">
-                    <Trash2 size={14} /> Remove
-                  </button>
-                </div>
-                <div className="preview-image-wrapper">
-                  <img src={restaurantProfile.image} alt="Header" />
-                  <div className="preview-gradient-overlay"></div>
-                  <div className="preview-content">
-                    <div className="preview-text">
-                        <h3>{restaurantProfile.name || "Kitchen's Name"}</h3>
-                        <p>{restaurantProfile.cuisine || 'Cuisine Type'}</p>
-                    </div>
-                  </div>
-                </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px', textAlign: 'center', fontStyle: 'italic' }}>
-                  This is how kitchen's image will appear to customers.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <button type="submit" className="styled-btn-primary mt-4" disabled={profileSyncing || uploadingImage}>
-            {uploadingImage ? 'Image Uploading...' : profileSyncing ? 'Saving...' : 'Save'}
+        {/* Save Button */}
+        <div className="submit-section card-animation" style={{ animationDelay: '0.4s' }}>
+          <button type="submit" className="styled-btn-primary save-btn" disabled={profileSyncing || uploadingImage}>
+            {uploadingImage ? 'Image Uploading...' : profileSyncing ? 'Saving Updates...' : 'Save Kitchen Details'}
           </button>
-        </form>
-      </section>
+        </div>
+      </form>
 
       {/* Map Modal */}
       {showMapModal && mapLocation && (

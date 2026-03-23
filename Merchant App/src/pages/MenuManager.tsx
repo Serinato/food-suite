@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
-import { Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, Trash2, Plus } from 'lucide-react';
 import { scanMenuFromImage } from '../aiService';
 import type { MenuItem, RestaurantProfile } from '../hooks/useMerchantState';
 import './MenuManager.css';
@@ -17,7 +17,9 @@ interface MenuContext {
 const MenuManager: React.FC = () => {
   const { restaurantId, menuItems } = useOutletContext<MenuContext>();
   const [syncing, setSyncing] = useState(false);
+  const [isFormVisible, setIsFormVisible] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [dishToDelete, setDishToDelete] = useState<MenuItem | null>(null);
   
   const [uploadingDishImage, setUploadingDishImage] = useState(false);
   const [dishImageSuccess, setDishImageSuccess] = useState(false);
@@ -82,6 +84,7 @@ const MenuManager: React.FC = () => {
       }
       setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
       setDishImageSuccess(false);
+      setIsFormVisible(false);
     } catch (_error) {
       alert("Failed to sync with cloud.");
     } finally {
@@ -91,6 +94,7 @@ const MenuManager: React.FC = () => {
 
   const handleEditClick = (item: MenuItem) => {
     setEditingItemId(item.id);
+    setIsFormVisible(true);
     setNewItem({
       name: item.name,
       price: item.price.toString(),
@@ -112,11 +116,21 @@ const MenuManager: React.FC = () => {
     }
   };
 
-  const handleDelete = async (itemId: string) => {
-    if (!confirm('Are you sure?')) return;
+  const handleDeleteClick = (item: MenuItem) => {
+    setDishToDelete(item);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!dishToDelete) return;
+    setSyncing(true);
     try {
-      await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId));
-    } catch (_error) {}
+      await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', dishToDelete.id));
+      setDishToDelete(null);
+    } catch (_error) {
+      alert("Failed to delete dish.");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,20 +178,48 @@ const MenuManager: React.FC = () => {
 
   return (
     <div className="menu-container">
-      <section className="menu-form-section card-box slide-up">
-        <div className="section-header-flex">
-          <h2>{editingItemId ? 'Edit Dish' : 'Add New Dish'}</h2>
-          {!editingItemId && (
+      {menuItems.length > 0 && !isFormVisible && (
+        <div className="menu-top-actions fade-in">
+          <button className="styled-btn-primary add-dish-btn" onClick={() => setIsFormVisible(true)}>
+            <Plus size={20} /> Add Dish
+          </button>
+          <div className="scan-button-wrapper">
+            <input type="file" accept="image/*" onChange={handleScanUpload} id="menu-scan-upload-top" className="file-input-hidden" />
+            <label htmlFor="menu-scan-upload-top" className="scan-badge">
+              ✨ Scan Menu
+            </label>
+          </div>
+        </div>
+      )}
+
+      {menuItems.length === 0 && !isFormVisible && (
+        <div className="empty-menu-state fade-in">
+          <div className="empty-icon-pulse">
+            <Plus size={40} className="pulse-icon" />
+          </div>
+          <h3>Your menu is empty</h3>
+          <p>Add your first dish or scan an existing menu to get started.</p>
+          <div className="empty-actions">
+            <button className="styled-btn-primary animated-btn" onClick={() => setIsFormVisible(true)}>
+              <Plus size={20} /> Add Dish
+            </button>
             <div className="scan-button-wrapper">
-              <input type="file" accept="image/*" onChange={handleScanUpload} id="menu-scan-upload" className="file-input-hidden" />
-              <label htmlFor="menu-scan-upload" className="scan-badge">
+              <input type="file" accept="image/*" onChange={handleScanUpload} id="menu-scan-upload-empty" className="file-input-hidden" />
+              <label htmlFor="menu-scan-upload-empty" className="scan-badge animated-scan">
                 ✨ Scan Menu
               </label>
             </div>
-          )}
+          </div>
         </div>
+      )}
 
-        <form onSubmit={handleAddOrEdit} className="menu-form">
+      <div className={`menu-form-wrapper ${isFormVisible ? 'expanded' : 'collapsed'}`}>
+        <section className="menu-form-section card-box">
+          <div className="section-header-flex">
+            <h2>{editingItemId ? 'Edit Dish' : 'Add New Dish'}</h2>
+          </div>
+
+          <form onSubmit={handleAddOrEdit} className="menu-form">
           <div className="input-group">
             <label>Dish Name</label>
             <input type="text" value={newItem.name} required onChange={(e) => setNewItem({ ...newItem, name: e.target.value })} placeholder="e.g. Paneer Butter Masala" className="styled-input" />
@@ -244,20 +286,21 @@ const MenuManager: React.FC = () => {
             <button type="submit" className="styled-btn-primary" disabled={syncing}>
               {syncing ? 'Saving...' : editingItemId ? 'Update Dish' : 'Add to Menu'}
             </button>
-            {editingItemId && (
-              <button type="button" className="styled-btn-secondary" disabled={syncing} onClick={() => {
-                setEditingItemId(null);
-                setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
-                setDishImageSuccess(false);
-              }}>
-                Cancel
-              </button>
-            )}
+            <button type="button" className="styled-btn-secondary" disabled={syncing} onClick={() => {
+              setEditingItemId(null);
+              setNewItem({ name: '', price: '', category: '', isVeg: '', description: '', imageUrl: '' });
+              setDishImageSuccess(false);
+              setIsFormVisible(false);
+            }}>
+              Cancel
+            </button>
           </div>
         </form>
-      </section>
+        </section>
+      </div>
 
-      <section className="menu-preview-section">
+      {menuItems.length > 0 && !isFormVisible && (
+        <section className="menu-preview-section fade-in">
         <div className="preview-header-main">
           <h2>Live Menu Preview</h2>
         </div>
@@ -289,7 +332,7 @@ const MenuManager: React.FC = () => {
                     <button className="icon-btn edit-btn" onClick={() => handleEditClick(item)}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                     </button>
-                    <button className="icon-btn delete-btn" onClick={() => handleDelete(item.id)}>
+                    <button className="icon-btn delete-btn" onClick={() => handleDeleteClick(item)}>
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                     </button>
                   </div>
@@ -299,6 +342,7 @@ const MenuManager: React.FC = () => {
           )}
         </div>
       </section>
+      )}
 
       {/* Scanner Modal */}
       {showScanner && (
@@ -354,6 +398,28 @@ const MenuManager: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {dishToDelete && (
+        <div className="scanner-overlay fade-in" style={{ zIndex: 1100 }}>
+          <div className="scanner-modal slide-up" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 style={{ color: 'var(--danger)' }}>Delete Dish?</h3>
+              <button className="close-btn" onClick={() => setDishToDelete(null)}>×</button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center', padding: '30px 20px' }}>
+              <p>Are you sure you want to delete <strong>{dishToDelete.name}</strong>?</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '8px' }}>This action cannot be undone.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="styled-btn-secondary" disabled={syncing} onClick={() => setDishToDelete(null)}>Cancel</button>
+              <button className="styled-btn-primary" style={{ background: 'var(--danger)' }} disabled={syncing} onClick={handleDeleteConfirm}>
+                {syncing ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

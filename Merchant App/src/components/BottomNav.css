@@ -1,8 +1,10 @@
 .bottom-nav {
   position: fixed;
   bottom: 0;
-  left: 0;
-  right: 0;
+  width: 100%;
+  max-width: 450px;
+  left: 50%;
+  transform: translateX(-50%);
   height: calc(70px + var(--safe-area-bottom));
   padding-bottom: var(--safe-area-bottom);
   background: rgba(255, 255, 255, 0.9);
